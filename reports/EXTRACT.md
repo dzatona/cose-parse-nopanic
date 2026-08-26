@@ -96,7 +96,70 @@ would have been extra axioms on the theorem. Loop-free remodel, same bytes:
 `get_u8` is new. Tests still reject `[0x18, 0x05]` as `NonCanonicalLength` and
 round-trip the source uint boundaries.
 
-## Not extracted
+## Not extracted (after layer 1)
 
 `read_bstr`, `next_map_key`, `slice_validated_array`, `verify`, `Sig_structure`,
 unions, `MaybeUninit`, raw pointer casts, ed25519, KNTRL `Typ`, payload, encoder.
+
+---
+
+# EXTRACT — `read_bstr` / `read_bstr_fixed_64` path (layer 2)
+
+Same source files and provenance hashes as the layer-1 table above.
+Destination is still `rust/src/lib.rs`.
+
+Called from `COSE_Sign1` verify (protected bstr, payload bstr, signature
+`read_bstr_fixed::<64>`). Kid `read_bstr_fixed::<16>` is not extracted here.
+
+Public hostile-bytes wrappers (Binder `parse_one` shape):
+
+- `read_bstr(buf: &[u8]) -> Result<&[u8], CodecError>`
+- `read_bstr_fixed_64(buf: &[u8]) -> Result<[u8; 64], CodecError>`
+
+Order matches the source: `read_head(MAJOR_BSTR)` → convert length → `take(len)`
+→ (fixed-64 only) `try_from`. Length is **not** checked against `N` before
+`take`, so a truncated 64-byte claim stays `UnexpectedEnd`, not `WrongLength`.
+
+No `while` / `for` / recursion on input length. `take(len)` is the same
+`checked_add` + `slice::get` as layer 1 (already no-panic for any `usize`).
+The 4096 `MAX_MESSAGE_LEN` cap was **not** applied: Aeneas did not turn
+`take` of an input length into a loop.
+
+## Line map (layer 2)
+
+| Source | Crate (`rust/src/lib.rs`) | Notes |
+|---|---|---|
+| `error.rs` 67–68 `LengthOverflow` | `CodecError::LengthOverflow` | variant kept; appended after layer-1 variants |
+| `error.rs` 50–51 `WrongLength` | `CodecError::WrongLength` | variant kept; appended after layer-1 variants |
+| `mod.rs` 47 `MAJOR_BSTR` | `MAJOR_BSTR` | body identical (`0x40`) |
+| `reader.rs` 137–142 `read_bstr` | `Reader::read_bstr` | same `read_head` + convert + `take`; see REMODEL |
+| `reader.rs` 149–152 `read_bstr_fixed::<N>` | `Reader::read_bstr_fixed_64` | monomorphized N=64; `take` then `try_from` |
+
+## Intentional diffs (`// EXTRACT:`)
+
+| Crate | Why |
+|---|---|
+| `read_bstr_fixed_64` instead of `read_bstr_fixed::<N>` | only the COSE_Sign1 signature width is in this path; kid N=16 is later |
+| Public free `read_bstr(&[u8])` / `read_bstr_fixed_64(&[u8])` | theorem entry points; body is `Reader::new` + method |
+
+## Remodel (`// REMODEL:`)
+
+| Source | Remodel | Error change |
+|---|---|---|
+| `usize::try_from(len).map_err(\|_\| LengthOverflow)` | `if len > usize::MAX as u64 { LengthOverflow } else { len as usize }` | **none** — same overflow predicate |
+| `<[u8; N]>::try_from(bytes).map_err(\|_\| WrongLength)` | `match <[u8; 64]>::try_from(bytes) { Ok(a) => Ok(a), Err(_) => Err(WrongLength) }` | **none** — same wrong-length predicate |
+
+Aeneas extracted the `as usize` bound check as `lift (UScalar.cast .Usize val)`.
+`UScalar.cast` is a pure truncate/zero-extend (never `fail`). The array
+`try_from` is the Aeneas stdlib model `TryFromArrayCopySlice.try_from`, which
+always returns `ok (Ok arr)` or `ok (Err ())`.
+
+No `MAX_MESSAGE_LEN` cap. Inputs that the source accepts as a complete bstr
+still succeed; truncated short bodies stay `UnexpectedEnd`; non-canonical
+stays `Err`.
+
+## Not extracted (after layer 2)
+
+`read_bstr_fixed::<16>` (kid), `next_map_key`, `slice_validated_array`,
+`verify`, `parse_sign1`, `Sig_structure`, unions, `MaybeUninit`, raw pointer
+casts, ed25519, KNTRL `Typ`, payload, encoder.
