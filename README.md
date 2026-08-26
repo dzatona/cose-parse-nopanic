@@ -1,10 +1,11 @@
-# cbor-nopanic
+# cose-parse-nopanic
 
 Machine-checked no-panic proof for one loop-free path in a hand-written
 RFC 8949 deterministic CBOR decoder (the layer under `COSE_Sign1`).
 
 Not the KNTRL product tree. Not a Runtime Verification repository.
-Work and name: Dmitrii Zatona.
+Work and name: Dmitrii Zatona. GitHub `dzatona/cose-parse-nopanic`.
+Crate/Lean remain `cbor_nopanic` until the next extraction.
 
 **Proved:** for every `&[u8]`, `read_uint` returns Aeneas `ok _` (a decoded
 `u64` or a normal `CodecError`); it does not panic. Not RFC 8949 correctness.
