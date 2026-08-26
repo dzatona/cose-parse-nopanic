@@ -597,19 +597,24 @@ pub fn decode_protected_header(bytes: &[u8]) -> Result<([u8; 16], Typ), CoseErro
     Ok((kid, typ))
 }
 
-/// A fixed, caller-owned `&mut [u8]` output buffer.
+/// A fixed `[u8; MAX_MESSAGE_LEN]` output buffer.
 ///
-/// EXTRACT: source implements a `Sink` trait (also for `Vec<u8>` under alloc).
-/// Only this concrete sink is on the verify path; no trait, no Vec.
-struct SliceSink<'a> {
-    buf: &'a mut [u8],
+/// EXTRACT: source `SliceSink` borrows `&mut [u8]` and implements a `Sink`
+/// trait (also for `Vec<u8>` under alloc). Owned array so Aeneas does not see
+/// `FnOnce` + `&mut [u8; N]` (Binder trap). No trait, no Vec.
+struct SliceSink {
+    buf: [u8; MAX_MESSAGE_LEN],
     len: usize,
 }
 
-impl<'a> SliceSink<'a> {
-    /// Wraps `buf` as an initially-empty sink.
-    const fn new(buf: &'a mut [u8]) -> Self {
-        Self { buf, len: 0 }
+impl SliceSink {
+    /// An initially-empty sink.
+    // EXTRACT: source `new` wraps a caller `&mut [u8]`.
+    const fn new() -> Self {
+        Self {
+            buf: [0_u8; MAX_MESSAGE_LEN],
+            len: 0,
+        }
     }
 
     /// Returns the number of bytes written so far.
@@ -665,7 +670,7 @@ fn be_byte(be: &[u8; 8], i: usize) -> Result<u8, CodecError> {
 ///
 /// # Errors
 /// Returns [`CodecError::BufferTooSmall`] if `sink` has no room left.
-fn write_head(sink: &mut SliceSink<'_>, major_base: u8, arg: u64) -> Result<(), CodecError> {
+fn write_head(sink: &mut SliceSink, major_base: u8, arg: u64) -> Result<(), CodecError> {
     if arg < 24 {
         // REMODEL: `u8::try_from(arg)` is an Aeneas-unknown `TryFrom<u64>` axiom.
         // `arg < 24` already fits in `u8`; same bytes as source.
@@ -712,7 +717,7 @@ fn write_head(sink: &mut SliceSink<'_>, major_base: u8, arg: u64) -> Result<(), 
 ///
 /// # Errors
 /// Returns [`CodecError::BufferTooSmall`] if `sink` has no room left.
-fn write_bstr(sink: &mut SliceSink<'_>, bytes: &[u8]) -> Result<(), CodecError> {
+fn write_bstr(sink: &mut SliceSink, bytes: &[u8]) -> Result<(), CodecError> {
     // REMODEL: `u64::try_from(bytes.len()).map_err(...)` is an Aeneas-unknown
     // `TryFrom<usize>` / `map_err` pair. `usize` fits in `u64` on this crate's
     // targets; LengthOverflow cannot fire here.
@@ -723,16 +728,17 @@ fn write_bstr(sink: &mut SliceSink<'_>, bytes: &[u8]) -> Result<(), CodecError> 
 
 /// Writes `text` as a canonical CBOR definite-length UTF-8 text string (major type 3).
 ///
-/// EXTRACT: source is generic over `impl Sink`. This path only has [`SliceSink`].
+/// EXTRACT: source is generic over `impl Sink` and takes `&str` (`text.as_bytes()`).
+/// This path only has [`SliceSink`] and only writes the RFC 8152 context string
+/// `Signature1` (ASCII), so the argument is already bytes.
 ///
 /// # Errors
 /// Returns [`CodecError::BufferTooSmall`] if `sink` has no room left.
-fn write_text(sink: &mut SliceSink<'_>, text: &str) -> Result<(), CodecError> {
-    let bytes = text.as_bytes();
+fn write_text(sink: &mut SliceSink, text: &[u8]) -> Result<(), CodecError> {
     // REMODEL: same `u64::try_from` replacement as [`write_bstr`].
-    let len = bytes.len() as u64;
+    let len = text.len() as u64;
     write_head(sink, MAJOR_TEXT, len)?;
-    sink.write_bytes(bytes)
+    sink.write_bytes(text)
 }
 
 /// Writes a canonical CBOR definite-length array header (major type 4) for `len` items.
@@ -741,7 +747,7 @@ fn write_text(sink: &mut SliceSink<'_>, text: &str) -> Result<(), CodecError> {
 ///
 /// # Errors
 /// Returns [`CodecError::BufferTooSmall`] if `sink` has no room left.
-fn write_array_header(sink: &mut SliceSink<'_>, len: u64) -> Result<(), CodecError> {
+fn write_array_header(sink: &mut SliceSink, len: u64) -> Result<(), CodecError> {
     write_head(sink, MAJOR_ARRAY, len)
 }
 
@@ -752,23 +758,9 @@ fn write_array_header(sink: &mut SliceSink<'_>, len: u64) -> Result<(), CodecErr
 /// public function does not take `FnOnce` + `&mut [u8; N]` (Binder trap).
 pub struct SigStructure {
     /// Encoded bytes, zero-padded after [`Self::len`].
-    buf: [u8; MAX_MESSAGE_LEN],
+    pub buf: [u8; MAX_MESSAGE_LEN],
     /// Number of valid bytes in [`Self::buf`].
-    len: usize,
-}
-
-impl SigStructure {
-    /// Returns the written prefix.
-    ///
-    /// Empty if `len` is out of range (cannot happen for a value returned by
-    /// [`build_sig_structure`]).
-    #[must_use]
-    pub fn as_bytes(&self) -> &[u8] {
-        match self.buf.get(..self.len) {
-            Some(bytes) => bytes,
-            None => &[],
-        }
-    }
+    pub len: usize,
 }
 
 /// Reconstructs the RFC 8152 `Sig_structure` `["Signature1", protected,
@@ -784,25 +776,29 @@ pub fn build_sig_structure(
     protected: &[u8],
     payload: &[u8],
 ) -> Result<SigStructure, CoseError> {
-    let mut buf = [0_u8; MAX_MESSAGE_LEN];
-    let written_len = {
-        let mut sink = SliceSink::new(&mut buf);
-        write_array_header(&mut sink, 4)?;
-        write_text(&mut sink, "Signature1")?;
-        write_bstr(&mut sink, protected)?;
-        write_bstr(&mut sink, external_aad(typ))?;
-        write_bstr(&mut sink, payload)?;
-        sink.len()
-    };
-    // REMODEL: `Option::ok_or` is an Aeneas-unknown external. Same
-    // `get(..written_len)` check as source; `None` is still BufferTooSmall.
-    match buf.get(..written_len) {
-        Some(_) => Ok(SigStructure {
-            buf,
-            len: written_len,
-        }),
-        None => Err(CoseError::Codec(CodecError::BufferTooSmall)),
+    let mut sink = SliceSink::new();
+    write_array_header(&mut sink, 4)?;
+    write_text(&mut sink, b"Signature1")?;
+    write_bstr(&mut sink, protected)?;
+    // EXTRACT: same match as [`external_aad`], with byte literals so Aeneas
+    // does not mix a `'static` global slice with `&mut SliceSink`.
+    match typ {
+        Typ::License => write_bstr(&mut sink, b"kntrl/license/v1")?,
+        Typ::Enroll => write_bstr(&mut sink, b"kntrl/enroll/v1")?,
+        Typ::Revoke => write_bstr(&mut sink, b"kntrl/revoke/v1")?,
+        Typ::TrustUpdate => write_bstr(&mut sink, b"kntrl/trust-update/v1")?,
     }
+    write_bstr(&mut sink, payload)?;
+    let written_len = sink.len();
+    // REMODEL: source is `out.get(..written_len).ok_or(BufferTooSmall)`.
+    // A length check avoids re-slicing the owned array (Aeneas bottoms).
+    if written_len > MAX_MESSAGE_LEN {
+        return Err(CoseError::Codec(CodecError::BufferTooSmall));
+    }
+    Ok(SigStructure {
+        buf: sink.buf,
+        len: written_len,
+    })
 }
 
 #[cfg(test)]
@@ -1301,11 +1297,18 @@ mod tests {
         }
     }
 
+    fn sig_bytes(got: &super::SigStructure) -> &[u8] {
+        match got.buf.get(..got.len) {
+            Some(bytes) => bytes,
+            None => &[],
+        }
+    }
+
     /// Empty protected/payload still produce array-4 + text "Signature1".
     #[test]
     fn should_encode_empty_sig_structure() {
         let got = build_sig_structure(Typ::License, &[], &[]).expect("empty inputs must fit");
-        let bytes = got.as_bytes();
+        let bytes = sig_bytes(&got);
         assert_eq!(bytes.first().copied(), Some(0x84));
         assert_eq!(bytes.get(1).copied(), Some(0x6A));
         assert_eq!(bytes.get(2..12), Some(b"Signature1".as_slice()));
@@ -1322,7 +1325,7 @@ mod tests {
         let payload = [0x01_u8, 0x02];
         let got =
             build_sig_structure(Typ::Enroll, &protected, &payload).expect("tiny inputs must fit");
-        let bytes = got.as_bytes();
+        let bytes = sig_bytes(&got);
         assert_eq!(bytes.first().copied(), Some(0x84));
         assert_eq!(bytes.get(2..12), Some(b"Signature1".as_slice()));
         assert_eq!(bytes.get(12).copied(), Some(0x41));
@@ -1341,10 +1344,10 @@ mod tests {
         let trust =
             build_sig_structure(Typ::TrustUpdate, &[], &[]).expect("trust-update aad must fit");
         let encodings = [
-            license.as_bytes(),
-            enroll.as_bytes(),
-            revoke.as_bytes(),
-            trust.as_bytes(),
+            sig_bytes(&license),
+            sig_bytes(&enroll),
+            sig_bytes(&revoke),
+            sig_bytes(&trust),
         ];
         for (i, a) in encodings.iter().enumerate() {
             for (j, b) in encodings.iter().enumerate() {
@@ -1353,20 +1356,16 @@ mod tests {
                 }
             }
         }
-        assert!(license
-            .as_bytes()
+        assert!(sig_bytes(&license)
             .windows(AAD_LICENSE.len())
             .any(|w| w == AAD_LICENSE));
-        assert!(enroll
-            .as_bytes()
+        assert!(sig_bytes(&enroll)
             .windows(AAD_ENROLL.len())
             .any(|w| w == AAD_ENROLL));
-        assert!(revoke
-            .as_bytes()
+        assert!(sig_bytes(&revoke)
             .windows(AAD_REVOKE.len())
             .any(|w| w == AAD_REVOKE));
-        assert!(trust
-            .as_bytes()
+        assert!(sig_bytes(&trust)
             .windows(AAD_TRUST_UPDATE.len())
             .any(|w| w == AAD_TRUST_UPDATE));
     }
