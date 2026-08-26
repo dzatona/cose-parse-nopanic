@@ -552,3 +552,127 @@ lemma. No `STOP.md`.
 raw pointer casts, ed25519 / dalek, KNTRL `Typ` meaning, payload decode.
 Unused `CoseError` variants (`SignatureInvalid`, `InvalidPublicKey`,
 `InvalidSigningKey`). The `Sink` trait and `Vec` sink.
+
+---
+
+# EXTRACT — `parse_sign1` path (finale)
+
+Same source files and provenance hashes as the layer-5 table above.
+Destination is still `rust/src/lib.rs`. `parse_sign1` is not in the source:
+it is the `// EXTRACT:` wrapper `verify` minus crypto.
+
+## Provenance (finale)
+
+Local checkout: `/Users/dzatona/Sites/MacExchange/kntrl-org/api-kntrl-org`  
+HEAD: `206ec5ecab0f579d538eac7897434d9a2f43f058`  
+Last commit touching `cose/mod.rs`:
+`0a2f9a176ec041aaf38c4775473cd8e41406867a` `docs: fix rustdoc private and feature-gated links`
+
+| File | sha256 |
+|---|---|
+| `kntrl-license-core/src/cose/mod.rs` | `8abf884d28ee63c28ff5f85aba99e74cc662c52462741d180d9ca20a2e0a7a28` |
+
+Control-flow source of `parse_sign1` is `verify` lines 221–239 plus the
+`Ok(Parsed { kid, typ, payload })` at 248. CUT 241–246 (dalek). Quoted
+read-only, not copied as a tree:
+
+```
+pub fn verify<'a>(bytes: &'a [u8], expected_pubkey: &[u8; 32]) -> Result<Parsed<'a>, CoseError> {
+    let mut reader = Reader::new(bytes);
+    let count = reader.read_array_header()?;
+    if count != 4 {
+        return Err(CoseError::MalformedEnvelope);
+    }
+    let protected = reader.read_bstr()?;
+    let unprotected_count = reader.read_map_header()?;
+    if unprotected_count != 0 {
+        return Err(CoseError::NonEmptyUnprotectedHeader);
+    }
+    let payload = reader.read_bstr()?;
+    let signature_bytes = reader.read_bstr_fixed::<64>()?;
+    reader.finish()?;
+
+    let (kid, typ) = decode_protected_header(protected)?;
+
+    let mut sig_buf = [0_u8; MAX_MESSAGE_LEN];
+    let sig_structure = build_sig_structure(typ, protected, payload, &mut sig_buf)?;
+
+    let verifying_key = VerifyingKey::from_bytes(expected_pubkey)
+        .map_err(|_bad_key| CoseError::InvalidPublicKey)?;
+    let signature = Signature::from_bytes(&signature_bytes);
+    verifying_key
+        .verify_strict(sig_structure, &signature)
+        .map_err(|_bad_signature| CoseError::SignatureInvalid)?;
+
+    Ok(Parsed { kid, typ, payload })
+}
+```
+
+CUT (not in `parse_sign1`, not in the theorem):
+
+| Source | Why cut |
+|---|---|
+| 221 `expected_pubkey: &[u8; 32]` | no pubkey |
+| 241–242 `VerifyingKey::from_bytes` | dalek |
+| 243 `Signature::from_bytes` | dalek |
+| 244–246 `verify_strict` | dalek |
+
+Public hostile-bytes wrapper (Binder `parse_one` shape):
+
+- `parse_sign1(bytes: &[u8]) -> Result<Parsed, CoseError>`
+
+Body composes already-extracted helpers. That is byte-equivalent to
+inlining `Reader::new` / array4 / protected bstr / empty map / payload
+bstr / sig64 / `finish`:
+
+1–7. `read_sign1_envelope` = source 222–234
+8. `decode_protected_header` = source 236
+9. `build_sig_structure` = source 238–239 (owned buffer; written bytes discarded; `BufferTooSmall` stays `Err`)
+10. `Ok(Parsed { kid, typ, payload })` = source 248
+
+Signature bytes are consumed inside `read_sign1_envelope` and discarded.
+They are not skipped: `finish` would otherwise see the 64-byte tail.
+`build_sig_structure` is not skipped: an envelope whose payload fits the
+bstr but not `[u8; 4096]` still returns `Codec(BufferTooSmall)`.
+
+`Parsed` fields match source (`kid: [u8; 16]`, `typ: Typ`,
+`payload: &'a [u8]`). Product `Typ` meaning is outside the theorem.
+
+No `while` / `for` / recursion on input length. No dalek.
+
+## Line map (finale)
+
+| Source | Crate (`rust/src/lib.rs`) | Notes |
+|---|---|---|
+| `cose/mod.rs` 55–64 `Parsed` | `Parsed` 811–818 | same three fields; `Debug`/`Clone`/`Copy` omitted |
+| `cose/mod.rs` 221–234 | `read_sign1_envelope` 526–545 | already extracted; called from `parse_sign1` |
+| `cose/mod.rs` 236 | `parse_sign1` 839 | `decode_protected_header(envelope.protected)` |
+| `cose/mod.rs` 238–239 | `parse_sign1` 840 | `build_sig_structure`; no caller `out` buffer |
+| `cose/mod.rs` 241–246 | — | CUT dalek |
+| `cose/mod.rs` 248 | `parse_sign1` 841–845 | `Ok(Parsed { kid, typ, payload })` |
+| `cose/mod.rs` 221–239 + 248 | `parse_sign1` 837–846 | wrapper; no pubkey |
+
+## Intentional diffs (`// EXTRACT:`)
+
+| Crate | Why |
+|---|---|
+| `parse_sign1` does not exist in source | `verify` minus crypto; theorem entry point |
+| No `expected_pubkey` argument | crypto is outside the parse |
+| Composes three helpers instead of inlining the reader | same bytes as 222–234; helpers already proved |
+| `build_sig_structure` returns owned `SigStructure` | already extracted (Binder trap buffer-by-value); discarded |
+| `Parsed` without `Debug`/`Clone`/`Copy` | same unused slice-`fmt` reason as `Envelope` |
+| No dalek / `verify_strict` / `VerifyingKey` | CUT 241–246 |
+
+## Remodel (`// REMODEL:`)
+
+None on this wrapper beyond remodeled helpers already documented in
+layers 1–5. Composition does not change error predicates: malformed
+envelope, nonempty unprotected, bad header, truncated, trailing, and
+`BufferTooSmall` stay the same variants.
+
+## Not extracted (after finale)
+
+`slice_validated_array`, full `verify` (dalek), unions, `MaybeUninit`,
+raw pointer casts, ed25519, KNTRL `Typ` meaning, payload decode.
+Unused `CoseError` variants (`SignatureInvalid`, `InvalidPublicKey`,
+`InvalidSigningKey`). The `Sink` trait and `Vec` sink.
