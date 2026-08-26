@@ -13,10 +13,12 @@ RFC 8152 correctness, and it does **not** decode the protected-header map.
 ```
 
 `ok (Result.Ok Envelope)` is the four slots (raw protected bstr, raw payload
-bstr, 64-byte signature). `ok (Result.Err CodecError)` is a normal rejection
-(truncated slot, wrong major, non-canonical length, count ≠ 4, nonempty
-unprotected map, trailing bytes, `WrongLength` after a complete short
-signature). `fail` would be panic / OOB / unwrap.
+bstr, 64-byte signature). `ok (Result.Err CoseError)` is a normal rejection
+(count ≠ 4 → `MalformedEnvelope`; nonempty unprotected map →
+`NonEmptyUnprotectedHeader`; truncated / non-canonical / trailing bytes →
+`Codec(CodecError)`, including `UnexpectedEnd` on a truncated signature and
+`WrongLength` after a complete short signature). `fail` would be panic /
+OOB / unwrap.
 
 Theorems in `lean/NoPanic.lean`:
 
@@ -31,23 +33,23 @@ unchanged and still hold.
 ## Live run (2026-08-26)
 
 Pins match `TOOLCHAIN.md`: Charon `909ff09a` v0.1.220, Aeneas `c2015b86`,
-Lean 4.31.0.
+Lean 4.31.0. Ran against crate **0.8.0** (CoseError extract).
 
 ### `cargo test` (`rust/`)
 
 ```
 $ cargo test
-   Compiling cbor_nopanic v0.7.0 (/Users/dzatona/Sites/MacExchange/cose-parse-nopanic/rust)
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.30s
-     Running unittests src/lib.rs (target/debug/deps/cbor_nopanic-0f0dfd34b86c43f0)
+   Compiling cbor_nopanic v0.8.0 (/Users/dzatona/Sites/MacExchange/cose-parse-nopanic/rust)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.54s
+     Running unittests src/lib.rs (target/debug/deps/cbor_nopanic-fa5bd6380d643d4e)
 
 running 27 tests
 test tests::should_decode_canonical_array_header_count_4 ... ok
 test tests::should_decode_canonical_bstr ... ok
+test tests::should_decode_uint_smallest_form_boundaries ... ok
+test tests::should_decode_minimal_sign1_envelope ... ok
 test tests::should_decode_empty_map_header ... ok
 test tests::should_decode_fixed_64_bstr ... ok
-test tests::should_decode_minimal_sign1_envelope ... ok
-test tests::should_decode_uint_smallest_form_boundaries ... ok
 test tests::should_reject_empty_array_header_input ... ok
 test tests::should_reject_empty_bstr_input ... ok
 test tests::should_reject_empty_input ... ok
@@ -81,30 +83,28 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 CARGO_TEST_EXIT:0
 ```
 
-Layer-1's 6 uint tests and layer-2's 10 bstr tests remain green. New tests
-cover array-header count 4, non-canonical, empty, wrong major, truncated;
-minimal well-formed 4-array (empty protected/payload, empty unprotected map,
-64-byte sig); trailing bytes → `TrailingBytes`; count ≠ 4 →
-`MalformedEnvelope`; nonempty unprotected → `NonEmptyUnprotectedHeader`;
-truncated slots stay `UnexpectedEnd` (not `WrongLength` on a short sig body).
+Layer-1's 6 uint tests and layer-2's 10 bstr tests remain green. Envelope
+tests: count ≠ 4 → `CoseError::MalformedEnvelope`; nonempty unprotected →
+`CoseError::NonEmptyUnprotectedHeader`; trailing bytes →
+`CoseError::Codec(TrailingBytes)`; truncated slots stay
+`CoseError::Codec(UnexpectedEnd)` (not `WrongLength` on a short sig body).
 
 ### Charon (`rust/`, PATH includes `$HOME/charon/bin`)
 
-Ran against the crate at 0.6.0 (envelope code; 0.7.0 is the Lean-proof
-version bump only).
+Ran against the crate at **0.8.0** (same tree as this proof).
 
 ```
 $ charon version
 0.1.220
 
 $ charon cargo --preset=aeneas --dest-file ../llbc/cbor_nopanic.llbc
-   Compiling cbor_nopanic v0.6.0 (/Users/dzatona/Sites/MacExchange/cose-parse-nopanic/rust)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.61s
+   Compiling cbor_nopanic v0.8.0 (/Users/dzatona/Sites/MacExchange/cose-parse-nopanic/rust)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.67s
 CHARON_EXIT:0
 ```
 
 `llbc/cbor_nopanic.llbc` sha256 after this pass:
-`678160a46c864ec4cc2c4aea0f1a37cb3c53eec29d20c89a42bc051d05aca4e2`
+`50876b374c0afbd981c3d8d03b6612fae4a27df715d24c062c035387a4a8d799`
 
 ### Aeneas (progress bars stripped)
 
@@ -117,28 +117,29 @@ $ ~/aeneas/bin/aeneas -backend lean -dest ../lean ../llbc/cbor_nopanic.llbc
 [Info ] Imported: ../llbc/cbor_nopanic.llbc
 [Info ] Generated: ../lean/CborNopanic.lean
 [Warn ] The crate contains extracted external, unknown definitions: we advise using the option -split-files to allow manually providing these definitions in separate files.
-[Info ] Total execution time: 1.403458 seconds
+[Info ] Total execution time: 1.455770 seconds
 AENEAS_EXIT:0
 ```
 
 `lean/CborNopanic.lean` sha256:
-`ebfba7096fbd7a6110fc9b01eb76dc7e6dedfdab07ecb0aef3818accfddd9bf0`
+`5b04bcb22078f3ea6eb34dce01c0ece2b7cfdbccd82713c4bb4a0a79dea6b8ee`
 
-`NoPanic.lean` and `lakefile.lean` were not rewritten. Generated Lean has no
-`axiom` declarations and no loop on input length. `read_sign1_envelope` is
-the source order: array4, protected bstr, empty map, payload bstr, sig64,
-`finish`. The allowed 4096 cap was not used.
+`NoPanic.lean` and `lakefile.lean` were not rewritten (handwritten
+`NoPanic.lean` kept). Generated Lean has no `axiom` declarations and no loop
+on input length. `read_sign1_envelope` is the source order: array4, protected
+bstr, empty map, payload bstr, sig64, `finish`. `?` on `CodecError` uses
+`From` → `CoseError.Codec`. The allowed 4096 cap was not used.
 
 ### `lake build`
 
 ```
 $ cd ../lean && lake build
-info: NoPanic.lean:535:0: 'NoPanic.read_uint_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: NoPanic.lean:536:0: 'NoPanic.read_bstr_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: NoPanic.lean:537:0: 'NoPanic.read_bstr_fixed_64_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: NoPanic.lean:538:0: 'NoPanic.read_array_header_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: NoPanic.lean:539:0: 'NoPanic.read_map_header_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: NoPanic.lean:540:0: 'NoPanic.read_sign1_envelope_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:548:0: 'NoPanic.read_uint_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:549:0: 'NoPanic.read_bstr_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:550:0: 'NoPanic.read_bstr_fixed_64_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:551:0: 'NoPanic.read_array_header_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:552:0: 'NoPanic.read_map_header_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:553:0: 'NoPanic.read_sign1_envelope_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
 Build completed successfully (1698 jobs).
 LAKE_EXIT:0
 ```
