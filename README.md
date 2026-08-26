@@ -8,4 +8,6 @@ Work and name: Dmitrii Zatona.
 
 Toolchain (to match the Binder spike): Charon, Aeneas, Lean 4.
 
-Status: repository only. First theorem not chosen yet.
+***REMOVED***
+
+Status: spec written. Step 1 not started (`read_uint` / `read_head`, loop-free).
