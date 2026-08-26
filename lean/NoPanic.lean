@@ -1118,9 +1118,53 @@ theorem build_sig_structure_no_panic (typ : Typ) (protected1 payload : Slice U8)
           intro s1
           exact sig_after_aad_no_panic sink3 s1 payload
 
+theorem from_cose_same_residual_no_panic {T}
+    (residual : core.result.Result core.convert.Infallible CoseError) :
+    AlwaysOk
+      (core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+        T (core.convert.FromSame CoseError) residual) := by
+  cases residual with
+  | Ok x => nomatch x
+  | Err e =>
+    simp [core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual,
+      core.convert.FromSame, bind_tc_ok, AlwaysOk]
+
+/-- For every byte slice, `parse_sign1` returns `ok _` (`Parsed` or `CoseError`).
+    Composition of envelope + protected header + `Sig_structure`. Not `∀ pubkey`.
+    Signature verification is outside this function. -/
+theorem parse_sign1_no_panic (bytes : Slice U8) :
+    ∃ r, parse_sign1 bytes = ok r := by
+  unfold parse_sign1
+  apply AlwaysOk.bind (read_sign1_envelope_no_panic bytes)
+  intro r
+  apply AlwaysOk.bind (branch_no_panic r)
+  intro cf
+  cases cf with
+  | Break residual =>
+    exact from_cose_same_residual_no_panic (T := Parsed) residual
+  | Continue e =>
+    apply AlwaysOk.bind (decode_protected_header_no_panic e.protected)
+    intro r1
+    apply AlwaysOk.bind (branch_no_panic r1)
+    intro cf1
+    cases cf1 with
+    | Break residual =>
+      exact from_cose_same_residual_no_panic (T := Parsed) residual
+    | Continue val =>
+      rcases val with ⟨kid, typ⟩
+      apply AlwaysOk.bind (build_sig_structure_no_panic typ e.protected e.payload)
+      intro r2
+      apply AlwaysOk.bind (branch_no_panic r2)
+      intro cf2
+      cases cf2 with
+      | Break residual =>
+        exact from_cose_same_residual_no_panic (T := Parsed) residual
+      | Continue _ =>
+        exact AlwaysOk.of_ok _
+
 -- Expected: propext, Classical.choice, Quot.sound. See reports/PROOF.md,
 -- reports/PROOF-bstr.md, reports/PROOF-envelope.md, reports/PROOF-header.md,
--- and reports/PROOF-sig.md.
+-- reports/PROOF-sig.md, and reports/PROOF-parse.md.
 #print axioms read_uint_no_panic
 #print axioms read_bstr_no_panic
 #print axioms read_bstr_fixed_64_no_panic
@@ -1129,5 +1173,6 @@ theorem build_sig_structure_no_panic (typ : Typ) (protected1 payload : Slice U8)
 #print axioms read_sign1_envelope_no_panic
 #print axioms decode_protected_header_no_panic
 #print axioms build_sig_structure_no_panic
+#print axioms parse_sign1_no_panic
 
 end NoPanic

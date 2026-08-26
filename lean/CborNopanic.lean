@@ -15,7 +15,7 @@ set_option maxRecDepth 2048
 namespace cbor_nopanic
 
 /-- [cbor_nopanic::CodecError]
-    Source: 'src/lib.rs', lines 28:0-53:1
+    Source: 'src/lib.rs', lines 29:0-54:1
     Visibility: public -/
 @[discriminant isize]
 inductive CodecError where
@@ -32,7 +32,7 @@ inductive CodecError where
 | BufferTooSmall : CodecError
 
 /-- [cbor_nopanic::{impl core::fmt::Debug for cbor_nopanic::CodecError}::fmt]:
-    Source: 'src/lib.rs', lines 27:9-27:14
+    Source: 'src/lib.rs', lines 28:9-28:14
     Visibility: public -/
 def CodecError.Insts.CoreFmtDebug.fmt
   (self : CodecError) (f : core.fmt.Formatter) :
@@ -63,42 +63,42 @@ def CodecError.Insts.CoreFmtDebug.fmt
     core.fmt.Formatter.write_str f (toStr "BufferTooSmall")
 
 /-- Trait implementation: [cbor_nopanic::{impl core::fmt::Debug for cbor_nopanic::CodecError}]
-    Source: 'src/lib.rs', lines 27:9-27:14 -/
+    Source: 'src/lib.rs', lines 28:9-28:14 -/
 @[reducible]
 def CodecError.Insts.CoreFmtDebug : core.fmt.Debug CodecError := {
   fmt := CodecError.Insts.CoreFmtDebug.fmt
 }
 
 /-- [cbor_nopanic::{impl core::clone::Clone for cbor_nopanic::CodecError}::clone]:
-    Source: 'src/lib.rs', lines 27:16-27:21
+    Source: 'src/lib.rs', lines 28:16-28:21
     Visibility: public -/
 def CodecError.Insts.CoreCloneClone.clone
   (self : CodecError) : Result CodecError := do
   ok self
 
 /-- Trait implementation: [cbor_nopanic::{impl core::clone::Clone for cbor_nopanic::CodecError}]
-    Source: 'src/lib.rs', lines 27:16-27:21 -/
+    Source: 'src/lib.rs', lines 28:16-28:21 -/
 @[reducible]
 def CodecError.Insts.CoreCloneClone : core.clone.Clone CodecError := {
   clone := CodecError.Insts.CoreCloneClone.clone
 }
 
 /-- Trait implementation: [cbor_nopanic::{impl core::marker::Copy for cbor_nopanic::CodecError}]
-    Source: 'src/lib.rs', lines 27:23-27:27 -/
+    Source: 'src/lib.rs', lines 28:23-28:27 -/
 @[reducible]
 def CodecError.Insts.CoreMarkerCopy : core.marker.Copy CodecError := {
   cloneInst := CodecError.Insts.CoreCloneClone
 }
 
 /-- Trait implementation: [cbor_nopanic::{impl core::marker::StructuralPartialEq for cbor_nopanic::CodecError}]
-    Source: 'src/lib.rs', lines 27:29-27:38 -/
+    Source: 'src/lib.rs', lines 28:29-28:38 -/
 @[reducible]
 def CodecError.Insts.CoreMarkerStructuralPartialEq :
   core.marker.StructuralPartialEq CodecError := {
 }
 
 /-- [cbor_nopanic::{impl core::cmp::PartialEq<cbor_nopanic::CodecError> for cbor_nopanic::CodecError}::eq]:
-    Source: 'src/lib.rs', lines 27:29-27:38
+    Source: 'src/lib.rs', lines 28:29-28:38
     Visibility: public -/
 def CodecError.Insts.CoreCmpPartialEqCodecError.eq
   (self : CodecError) (other : CodecError) : Result Bool := do
@@ -107,7 +107,7 @@ def CodecError.Insts.CoreCmpPartialEqCodecError.eq
   ok (self1 = other1)
 
 /-- Trait implementation: [cbor_nopanic::{impl core::cmp::PartialEq<cbor_nopanic::CodecError> for cbor_nopanic::CodecError}]
-    Source: 'src/lib.rs', lines 27:29-27:38 -/
+    Source: 'src/lib.rs', lines 28:29-28:38 -/
 @[reducible]
 def CodecError.Insts.CoreCmpPartialEqCodecError : core.cmp.PartialEq CodecError
   CodecError := {
@@ -115,14 +115,14 @@ def CodecError.Insts.CoreCmpPartialEqCodecError : core.cmp.PartialEq CodecError
 }
 
 /-- [cbor_nopanic::{impl core::cmp::Eq for cbor_nopanic::CodecError}::assert_fields_are_eq]:
-    Source: 'src/lib.rs', lines 27:40-27:42
+    Source: 'src/lib.rs', lines 28:40-28:42
     Visibility: public -/
 def CodecError.Insts.CoreCmpEq.assert_fields_are_eq
   (self : CodecError) : Result Unit := do
   ok ()
 
 /-- Trait implementation: [cbor_nopanic::{impl core::cmp::Eq for cbor_nopanic::CodecError}]
-    Source: 'src/lib.rs', lines 27:40-27:42 -/
+    Source: 'src/lib.rs', lines 28:40-28:42 -/
 @[reducible]
 def CodecError.Insts.CoreCmpEq : core.cmp.Eq CodecError := {
   partialEqInst := CodecError.Insts.CoreCmpPartialEqCodecError
@@ -130,7 +130,7 @@ def CodecError.Insts.CoreCmpEq : core.cmp.Eq CodecError := {
 }
 
 /-- [cbor_nopanic::CoseError]
-    Source: 'src/lib.rs', lines 64:0-77:1
+    Source: 'src/lib.rs', lines 65:0-78:1
     Visibility: public -/
 @[discriminant isize]
 inductive CoseError where
@@ -142,7 +142,7 @@ inductive CoseError where
 | UnknownTyp : CoseError
 
 /-- [cbor_nopanic::{impl core::fmt::Debug for cbor_nopanic::CoseError}::fmt]:
-    Source: 'src/lib.rs', lines 63:9-63:14
+    Source: 'src/lib.rs', lines 64:9-64:14
     Visibility: public -/
 def CoseError.Insts.CoreFmtDebug.fmt
   (self : CoseError) (f : core.fmt.Formatter) :
@@ -164,42 +164,42 @@ def CoseError.Insts.CoreFmtDebug.fmt
   | CoseError.UnknownTyp => core.fmt.Formatter.write_str f (toStr "UnknownTyp")
 
 /-- Trait implementation: [cbor_nopanic::{impl core::fmt::Debug for cbor_nopanic::CoseError}]
-    Source: 'src/lib.rs', lines 63:9-63:14 -/
+    Source: 'src/lib.rs', lines 64:9-64:14 -/
 @[reducible]
 def CoseError.Insts.CoreFmtDebug : core.fmt.Debug CoseError := {
   fmt := CoseError.Insts.CoreFmtDebug.fmt
 }
 
 /-- [cbor_nopanic::{impl core::clone::Clone for cbor_nopanic::CoseError}::clone]:
-    Source: 'src/lib.rs', lines 63:16-63:21
+    Source: 'src/lib.rs', lines 64:16-64:21
     Visibility: public -/
 def CoseError.Insts.CoreCloneClone.clone
   (self : CoseError) : Result CoseError := do
   ok self
 
 /-- Trait implementation: [cbor_nopanic::{impl core::clone::Clone for cbor_nopanic::CoseError}]
-    Source: 'src/lib.rs', lines 63:16-63:21 -/
+    Source: 'src/lib.rs', lines 64:16-64:21 -/
 @[reducible]
 def CoseError.Insts.CoreCloneClone : core.clone.Clone CoseError := {
   clone := CoseError.Insts.CoreCloneClone.clone
 }
 
 /-- Trait implementation: [cbor_nopanic::{impl core::marker::Copy for cbor_nopanic::CoseError}]
-    Source: 'src/lib.rs', lines 63:23-63:27 -/
+    Source: 'src/lib.rs', lines 64:23-64:27 -/
 @[reducible]
 def CoseError.Insts.CoreMarkerCopy : core.marker.Copy CoseError := {
   cloneInst := CoseError.Insts.CoreCloneClone
 }
 
 /-- Trait implementation: [cbor_nopanic::{impl core::marker::StructuralPartialEq for cbor_nopanic::CoseError}]
-    Source: 'src/lib.rs', lines 63:29-63:38 -/
+    Source: 'src/lib.rs', lines 64:29-64:38 -/
 @[reducible]
 def CoseError.Insts.CoreMarkerStructuralPartialEq :
   core.marker.StructuralPartialEq CoseError := {
 }
 
 /-- [cbor_nopanic::{impl core::cmp::PartialEq<cbor_nopanic::CoseError> for cbor_nopanic::CoseError}::eq]:
-    Source: 'src/lib.rs', lines 63:29-63:38
+    Source: 'src/lib.rs', lines 64:29-64:38
     Visibility: public -/
 def CoseError.Insts.CoreCmpPartialEqCoseError.eq
   (self : CoseError) (other : CoseError) : Result Bool := do
@@ -225,7 +225,7 @@ def CoseError.Insts.CoreCmpPartialEqCoseError.eq
   else ok false
 
 /-- Trait implementation: [cbor_nopanic::{impl core::cmp::PartialEq<cbor_nopanic::CoseError> for cbor_nopanic::CoseError}]
-    Source: 'src/lib.rs', lines 63:29-63:38 -/
+    Source: 'src/lib.rs', lines 64:29-64:38 -/
 @[reducible]
 def CoseError.Insts.CoreCmpPartialEqCoseError : core.cmp.PartialEq CoseError
   CoseError := {
@@ -233,14 +233,14 @@ def CoseError.Insts.CoreCmpPartialEqCoseError : core.cmp.PartialEq CoseError
 }
 
 /-- [cbor_nopanic::{impl core::cmp::Eq for cbor_nopanic::CoseError}::assert_fields_are_eq]:
-    Source: 'src/lib.rs', lines 63:40-63:42
+    Source: 'src/lib.rs', lines 64:40-64:42
     Visibility: public -/
 def CoseError.Insts.CoreCmpEq.assert_fields_are_eq
   (self : CoseError) : Result Unit := do
   ok ()
 
 /-- Trait implementation: [cbor_nopanic::{impl core::cmp::Eq for cbor_nopanic::CoseError}]
-    Source: 'src/lib.rs', lines 63:40-63:42 -/
+    Source: 'src/lib.rs', lines 64:40-64:42 -/
 @[reducible]
 def CoseError.Insts.CoreCmpEq : core.cmp.Eq CoseError := {
   partialEqInst := CoseError.Insts.CoreCmpPartialEqCoseError
@@ -248,14 +248,14 @@ def CoseError.Insts.CoreCmpEq : core.cmp.Eq CoseError := {
 }
 
 /-- [cbor_nopanic::{impl core::convert::From<cbor_nopanic::CodecError> for cbor_nopanic::CoseError}::from]:
-    Source: 'src/lib.rs', lines 83:4-85:5
+    Source: 'src/lib.rs', lines 84:4-86:5
     Visibility: public -/
 def CoseError.Insts.CoreConvertFromCodecError.from
   (error : CodecError) : Result CoseError := do
   ok (CoseError.Codec error)
 
 /-- Trait implementation: [cbor_nopanic::{impl core::convert::From<cbor_nopanic::CodecError> for cbor_nopanic::CoseError}]
-    Source: 'src/lib.rs', lines 82:0-86:1 -/
+    Source: 'src/lib.rs', lines 83:0-87:1 -/
 @[reducible]
 def CoseError.Insts.CoreConvertFromCodecError : core.convert.From CoseError
   CodecError := {
@@ -263,49 +263,49 @@ def CoseError.Insts.CoreConvertFromCodecError : core.convert.From CoseError
 }
 
 /-- [cbor_nopanic::MAJOR_UNSIGNED]
-    Source: 'src/lib.rs', lines 89:0-89:32 -/
+    Source: 'src/lib.rs', lines 90:0-90:32 -/
 @[global_simps, irreducible] def MAJOR_UNSIGNED : Std.U8 := 0#u8
 
 /-- [cbor_nopanic::MAJOR_NEGATIVE]
-    Source: 'src/lib.rs', lines 91:0-91:32 -/
+    Source: 'src/lib.rs', lines 92:0-92:32 -/
 @[global_simps, irreducible] def MAJOR_NEGATIVE : Std.U8 := 32#u8
 
 /-- [cbor_nopanic::MAJOR_BSTR]
-    Source: 'src/lib.rs', lines 93:0-93:28 -/
+    Source: 'src/lib.rs', lines 94:0-94:28 -/
 @[global_simps, irreducible] def MAJOR_BSTR : Std.U8 := 64#u8
 
 /-- [cbor_nopanic::MAJOR_TEXT]
-    Source: 'src/lib.rs', lines 95:0-95:28 -/
+    Source: 'src/lib.rs', lines 96:0-96:28 -/
 @[global_simps, irreducible] def MAJOR_TEXT : Std.U8 := 96#u8
 
 /-- [cbor_nopanic::MAJOR_ARRAY]
-    Source: 'src/lib.rs', lines 97:0-97:29 -/
+    Source: 'src/lib.rs', lines 98:0-98:29 -/
 @[global_simps, irreducible] def MAJOR_ARRAY : Std.U8 := 128#u8
 
 /-- [cbor_nopanic::MAX_MESSAGE_LEN]
-    Source: 'src/lib.rs', lines 102:0-102:40
+    Source: 'src/lib.rs', lines 103:0-103:40
     Visibility: public -/
 @[global_simps, irreducible] def MAX_MESSAGE_LEN : Std.Usize := 4096#usize
 
 /-- [cbor_nopanic::MAJOR_MAP]
-    Source: 'src/lib.rs', lines 104:0-104:27 -/
+    Source: 'src/lib.rs', lines 105:0-105:27 -/
 @[global_simps, irreducible] def MAJOR_MAP : Std.U8 := 160#u8
 
 /-- [cbor_nopanic::MAJOR_MASK]
-    Source: 'src/lib.rs', lines 106:0-106:28 -/
+    Source: 'src/lib.rs', lines 107:0-107:28 -/
 @[global_simps, irreducible] def MAJOR_MASK : Std.U8 := 224#u8
 
 /-- [cbor_nopanic::ADDITIONAL_MASK]
-    Source: 'src/lib.rs', lines 108:0-108:33 -/
+    Source: 'src/lib.rs', lines 109:0-109:33 -/
 @[global_simps, irreducible] def ADDITIONAL_MASK : Std.U8 := 31#u8
 
 /-- [cbor_nopanic::ALG_EDDSA_BYTE]
-    Source: 'src/lib.rs', lines 110:0-110:49 -/
+    Source: 'src/lib.rs', lines 111:0-111:49 -/
 @[global_simps, irreducible]
 def ALG_EDDSA_BYTE : Std.U8 := MAJOR_NEGATIVE ||| 7#u8
 
 /-- [cbor_nopanic::Typ]
-    Source: 'src/lib.rs', lines 118:0-127:1
+    Source: 'src/lib.rs', lines 119:0-128:1
     Visibility: public -/
 @[discriminant isize]
 inductive Typ where
@@ -315,7 +315,7 @@ inductive Typ where
 | TrustUpdate : Typ
 
 /-- [cbor_nopanic::{impl core::fmt::Debug for cbor_nopanic::Typ}::fmt]:
-    Source: 'src/lib.rs', lines 117:9-117:14
+    Source: 'src/lib.rs', lines 118:9-118:14
     Visibility: public -/
 def Typ.Insts.CoreFmtDebug.fmt
   (self : Typ) (f : core.fmt.Formatter) :
@@ -328,41 +328,41 @@ def Typ.Insts.CoreFmtDebug.fmt
   | Typ.TrustUpdate => core.fmt.Formatter.write_str f (toStr "TrustUpdate")
 
 /-- Trait implementation: [cbor_nopanic::{impl core::fmt::Debug for cbor_nopanic::Typ}]
-    Source: 'src/lib.rs', lines 117:9-117:14 -/
+    Source: 'src/lib.rs', lines 118:9-118:14 -/
 @[reducible]
 def Typ.Insts.CoreFmtDebug : core.fmt.Debug Typ := {
   fmt := Typ.Insts.CoreFmtDebug.fmt
 }
 
 /-- [cbor_nopanic::{impl core::clone::Clone for cbor_nopanic::Typ}::clone]:
-    Source: 'src/lib.rs', lines 117:16-117:21
+    Source: 'src/lib.rs', lines 118:16-118:21
     Visibility: public -/
 def Typ.Insts.CoreCloneClone.clone (self : Typ) : Result Typ := do
   ok self
 
 /-- Trait implementation: [cbor_nopanic::{impl core::clone::Clone for cbor_nopanic::Typ}]
-    Source: 'src/lib.rs', lines 117:16-117:21 -/
+    Source: 'src/lib.rs', lines 118:16-118:21 -/
 @[reducible]
 def Typ.Insts.CoreCloneClone : core.clone.Clone Typ := {
   clone := Typ.Insts.CoreCloneClone.clone
 }
 
 /-- Trait implementation: [cbor_nopanic::{impl core::marker::Copy for cbor_nopanic::Typ}]
-    Source: 'src/lib.rs', lines 117:23-117:27 -/
+    Source: 'src/lib.rs', lines 118:23-118:27 -/
 @[reducible]
 def Typ.Insts.CoreMarkerCopy : core.marker.Copy Typ := {
   cloneInst := Typ.Insts.CoreCloneClone
 }
 
 /-- Trait implementation: [cbor_nopanic::{impl core::marker::StructuralPartialEq for cbor_nopanic::Typ}]
-    Source: 'src/lib.rs', lines 117:29-117:38 -/
+    Source: 'src/lib.rs', lines 118:29-118:38 -/
 @[reducible]
 def Typ.Insts.CoreMarkerStructuralPartialEq : core.marker.StructuralPartialEq
   Typ := {
 }
 
 /-- [cbor_nopanic::{impl core::cmp::PartialEq<cbor_nopanic::Typ> for cbor_nopanic::Typ}::eq]:
-    Source: 'src/lib.rs', lines 117:29-117:38
+    Source: 'src/lib.rs', lines 118:29-118:38
     Visibility: public -/
 def Typ.Insts.CoreCmpPartialEqTyp.eq
   (self : Typ) (other : Typ) : Result Bool := do
@@ -371,20 +371,20 @@ def Typ.Insts.CoreCmpPartialEqTyp.eq
   ok (self1 = other1)
 
 /-- Trait implementation: [cbor_nopanic::{impl core::cmp::PartialEq<cbor_nopanic::Typ> for cbor_nopanic::Typ}]
-    Source: 'src/lib.rs', lines 117:29-117:38 -/
+    Source: 'src/lib.rs', lines 118:29-118:38 -/
 @[reducible]
 def Typ.Insts.CoreCmpPartialEqTyp : core.cmp.PartialEq Typ Typ := {
   eq := Typ.Insts.CoreCmpPartialEqTyp.eq
 }
 
 /-- [cbor_nopanic::{impl core::cmp::Eq for cbor_nopanic::Typ}::assert_fields_are_eq]:
-    Source: 'src/lib.rs', lines 117:40-117:42
+    Source: 'src/lib.rs', lines 118:40-118:42
     Visibility: public -/
 def Typ.Insts.CoreCmpEq.assert_fields_are_eq (self : Typ) : Result Unit := do
   ok ()
 
 /-- Trait implementation: [cbor_nopanic::{impl core::cmp::Eq for cbor_nopanic::Typ}]
-    Source: 'src/lib.rs', lines 117:40-117:42 -/
+    Source: 'src/lib.rs', lines 118:40-118:42 -/
 @[reducible]
 def Typ.Insts.CoreCmpEq : core.cmp.Eq Typ := {
   partialEqInst := Typ.Insts.CoreCmpPartialEqTyp
@@ -392,7 +392,7 @@ def Typ.Insts.CoreCmpEq : core.cmp.Eq Typ := {
 }
 
 /-- [cbor_nopanic::{cbor_nopanic::Typ}::from_u64]:
-    Source: 'src/lib.rs', lines 134:4-142:5
+    Source: 'src/lib.rs', lines 135:4-143:5
     Visibility: public -/
 def Typ.from_u64
   (value : Std.U64) : Result (core.result.Result Typ CodecError) := do
@@ -404,7 +404,7 @@ def Typ.from_u64
   | _ => ok (core.result.Result.Err CodecError.InvalidEnumValue)
 
 /-- [cbor_nopanic::AAD_LICENSE]
-    Source: 'src/lib.rs', lines 146:0-146:51
+    Source: 'src/lib.rs', lines 147:0-147:51
     Visibility: public -/
 @[global_simps, irreducible]
 def AAD_LICENSE : Slice Std.U8 :=
@@ -415,7 +415,7 @@ def AAD_LICENSE : Slice Std.U8 :=
       ])
 
 /-- [cbor_nopanic::AAD_ENROLL]
-    Source: 'src/lib.rs', lines 148:0-148:49
+    Source: 'src/lib.rs', lines 149:0-149:49
     Visibility: public -/
 @[global_simps, irreducible]
 def AAD_ENROLL : Slice Std.U8 :=
@@ -426,7 +426,7 @@ def AAD_ENROLL : Slice Std.U8 :=
       ])
 
 /-- [cbor_nopanic::AAD_REVOKE]
-    Source: 'src/lib.rs', lines 150:0-150:49
+    Source: 'src/lib.rs', lines 151:0-151:49
     Visibility: public -/
 @[global_simps, irreducible]
 def AAD_REVOKE : Slice Std.U8 :=
@@ -437,7 +437,7 @@ def AAD_REVOKE : Slice Std.U8 :=
       ])
 
 /-- [cbor_nopanic::AAD_TRUST_UPDATE]
-    Source: 'src/lib.rs', lines 152:0-152:61
+    Source: 'src/lib.rs', lines 153:0-153:61
     Visibility: public -/
 @[global_simps, irreducible]
 def AAD_TRUST_UPDATE : Slice Std.U8 :=
@@ -449,7 +449,7 @@ def AAD_TRUST_UPDATE : Slice Std.U8 :=
       ])
 
 /-- [cbor_nopanic::external_aad]:
-    Source: 'src/lib.rs', lines 159:0-166:1
+    Source: 'src/lib.rs', lines 160:0-167:1
     Visibility: public -/
 def external_aad (typ : Typ) : Result (Slice Std.U8) := do
   match typ with
@@ -459,27 +459,27 @@ def external_aad (typ : Typ) : Result (Slice Std.U8) := do
   | Typ.TrustUpdate => ok AAD_TRUST_UPDATE
 
 /-- [cbor_nopanic::Reader]
-    Source: 'src/lib.rs', lines 174:0-177:1
+    Source: 'src/lib.rs', lines 175:0-178:1
     Visibility: public -/
 structure Reader where
   buf : Slice Std.U8
   pos : Std.Usize
 
 /-- [cbor_nopanic::{cbor_nopanic::Reader<'a>}::new]:
-    Source: 'src/lib.rs', lines 182:4-184:5
+    Source: 'src/lib.rs', lines 183:4-185:5
     Visibility: public -/
 def Reader.new (buf : Slice Std.U8) : Result Reader := do
   ok { buf, pos := 0#usize }
 
 /-- [cbor_nopanic::{cbor_nopanic::Reader<'a>}::is_empty]:
-    Source: 'src/lib.rs', lines 188:4-190:5
+    Source: 'src/lib.rs', lines 189:4-191:5
     Visibility: public -/
 def Reader.is_empty (self : Reader) : Result Bool := do
   let i := Slice.len self.buf
   ok (self.pos = i)
 
 /-- [cbor_nopanic::{cbor_nopanic::Reader<'a>}::finish]:
-    Source: 'src/lib.rs', lines 196:4-202:5
+    Source: 'src/lib.rs', lines 197:4-203:5
     Visibility: public -/
 def Reader.finish
   (self : Reader) : Result (core.result.Result Unit CodecError) := do
@@ -489,7 +489,7 @@ def Reader.finish
   else ok (core.result.Result.Err CodecError.TrailingBytes)
 
 /-- [cbor_nopanic::{cbor_nopanic::Reader<'a>}::take]:
-    Source: 'src/lib.rs', lines 208:4-222:5 -/
+    Source: 'src/lib.rs', lines 209:4-223:5 -/
 def Reader.take
   (self : Reader) (n : Std.Usize) :
   Result ((core.result.Result (Slice Std.U8) CodecError) × Reader)
@@ -506,7 +506,7 @@ def Reader.take
     | some out => ok (core.result.Result.Ok out, { self with pos := end1 })
 
 /-- [cbor_nopanic::get_u8]:
-    Source: 'src/lib.rs', lines 425:0-430:1 -/
+    Source: 'src/lib.rs', lines 426:0-431:1 -/
 def get_u8
   (bytes : Slice Std.U8) (i : Std.Usize) :
   Result (core.result.Result Std.U8 CodecError)
@@ -518,7 +518,7 @@ def get_u8
   | some b => ok (core.result.Result.Ok b)
 
 /-- [cbor_nopanic::{cbor_nopanic::Reader<'a>}::read_head]:
-    Source: 'src/lib.rs', lines 233:4-295:5 -/
+    Source: 'src/lib.rs', lines 234:4-296:5 -/
 def Reader.read_head
   (self : Reader) (major_base : Std.U8) :
   Result ((core.result.Result Std.U64 CodecError) × Reader)
@@ -791,7 +791,7 @@ def Reader.read_head
     ok (r1, self1)
 
 /-- [cbor_nopanic::{cbor_nopanic::Reader<'a>}::read_uint]:
-    Source: 'src/lib.rs', lines 303:4-305:5
+    Source: 'src/lib.rs', lines 304:4-306:5
     Visibility: public -/
 def Reader.read_uint
   (self : Reader) :
@@ -800,7 +800,7 @@ def Reader.read_uint
   Reader.read_head self MAJOR_UNSIGNED
 
 /-- [cbor_nopanic::{cbor_nopanic::Reader<'a>}::read_bstr]:
-    Source: 'src/lib.rs', lines 314:4-324:5
+    Source: 'src/lib.rs', lines 315:4-325:5
     Visibility: public -/
 def Reader.read_bstr
   (self : Reader) :
@@ -822,7 +822,7 @@ def Reader.read_bstr
     ok (r1, self1)
 
 /-- [cbor_nopanic::{cbor_nopanic::Reader<'a>}::read_bstr_fixed_64]:
-    Source: 'src/lib.rs', lines 335:4-344:5
+    Source: 'src/lib.rs', lines 336:4-345:5
     Visibility: public -/
 def Reader.read_bstr_fixed_64
   (self : Reader) :
@@ -845,7 +845,7 @@ def Reader.read_bstr_fixed_64
     ok (r1, self1)
 
 /-- [cbor_nopanic::{cbor_nopanic::Reader<'a>}::read_bstr_fixed_16]:
-    Source: 'src/lib.rs', lines 355:4-364:5
+    Source: 'src/lib.rs', lines 356:4-365:5
     Visibility: public -/
 def Reader.read_bstr_fixed_16
   (self : Reader) :
@@ -868,7 +868,7 @@ def Reader.read_bstr_fixed_16
     ok (r1, self1)
 
 /-- [cbor_nopanic::{cbor_nopanic::Reader<'a>}::read_array_header]:
-    Source: 'src/lib.rs', lines 370:4-372:5
+    Source: 'src/lib.rs', lines 371:4-373:5
     Visibility: public -/
 def Reader.read_array_header
   (self : Reader) :
@@ -877,7 +877,7 @@ def Reader.read_array_header
   Reader.read_head self MAJOR_ARRAY
 
 /-- [cbor_nopanic::{cbor_nopanic::Reader<'a>}::read_map_header]:
-    Source: 'src/lib.rs', lines 378:4-380:5
+    Source: 'src/lib.rs', lines 379:4-381:5
     Visibility: public -/
 def Reader.read_map_header
   (self : Reader) :
@@ -886,7 +886,7 @@ def Reader.read_map_header
   Reader.read_head self MAJOR_MAP
 
 /-- [cbor_nopanic::{cbor_nopanic::Reader<'a>}::read_fixed_byte]:
-    Source: 'src/lib.rs', lines 387:4-396:5
+    Source: 'src/lib.rs', lines 388:4-397:5
     Visibility: public -/
 def Reader.read_fixed_byte
   (self : Reader) (expected : Std.U8) :
@@ -915,7 +915,7 @@ def Reader.read_fixed_byte
     ok (r1, self1)
 
 /-- [cbor_nopanic::{cbor_nopanic::Reader<'a>}::next_map_key]:
-    Source: 'src/lib.rs', lines 404:4-416:5
+    Source: 'src/lib.rs', lines 405:4-417:5
     Visibility: public -/
 def Reader.next_map_key
   (self : Reader) (last_key : Option Std.U64) :
@@ -941,7 +941,7 @@ def Reader.next_map_key
     ok (r1, self1, last_key)
 
 /-- [cbor_nopanic::read_uint]:
-    Source: 'src/lib.rs', lines 438:0-442:1
+    Source: 'src/lib.rs', lines 439:0-443:1
     Visibility: public -/
 def read_uint
   (buf : Slice Std.U8) : Result (core.result.Result Std.U64 CodecError) := do
@@ -950,7 +950,7 @@ def read_uint
   ok r
 
 /-- [cbor_nopanic::read_bstr]:
-    Source: 'src/lib.rs', lines 450:0-454:1
+    Source: 'src/lib.rs', lines 451:0-455:1
     Visibility: public -/
 def read_bstr
   (buf : Slice Std.U8) :
@@ -961,7 +961,7 @@ def read_bstr
   ok r
 
 /-- [cbor_nopanic::read_bstr_fixed_64]:
-    Source: 'src/lib.rs', lines 462:0-466:1
+    Source: 'src/lib.rs', lines 463:0-467:1
     Visibility: public -/
 def read_bstr_fixed_64
   (buf : Slice Std.U8) :
@@ -972,7 +972,7 @@ def read_bstr_fixed_64
   ok r
 
 /-- [cbor_nopanic::read_array_header]:
-    Source: 'src/lib.rs', lines 474:0-478:1
+    Source: 'src/lib.rs', lines 475:0-479:1
     Visibility: public -/
 def read_array_header
   (buf : Slice Std.U8) : Result (core.result.Result Std.U64 CodecError) := do
@@ -981,7 +981,7 @@ def read_array_header
   ok r
 
 /-- [cbor_nopanic::read_map_header]:
-    Source: 'src/lib.rs', lines 486:0-490:1
+    Source: 'src/lib.rs', lines 487:0-491:1
     Visibility: public -/
 def read_map_header
   (buf : Slice Std.U8) : Result (core.result.Result Std.U64 CodecError) := do
@@ -990,7 +990,7 @@ def read_map_header
   ok r
 
 /-- [cbor_nopanic::Envelope]
-    Source: 'src/lib.rs', lines 498:0-505:1
+    Source: 'src/lib.rs', lines 499:0-506:1
     Visibility: public -/
 structure Envelope where
   «protected» : Slice Std.U8
@@ -998,7 +998,7 @@ structure Envelope where
   signature : Array Std.U8 64#usize
 
 /-- [cbor_nopanic::read_sign1_envelope]:
-    Source: 'src/lib.rs', lines 526:0-545:1
+    Source: 'src/lib.rs', lines 527:0-546:1
     Visibility: public -/
 def read_sign1_envelope
   (buf : Slice Std.U8) : Result (core.result.Result Envelope CoseError) := do
@@ -1056,7 +1056,7 @@ def read_sign1_envelope
       Envelope CoseError.Insts.CoreConvertFromCodecError residual
 
 /-- [cbor_nopanic::decode_protected_header]:
-    Source: 'src/lib.rs', lines 559:0-598:1
+    Source: 'src/lib.rs', lines 560:0-599:1
     Visibility: public -/
 def decode_protected_header
   (bytes : Slice Std.U8) :
@@ -1151,24 +1151,24 @@ def decode_protected_header
       CoseError.Insts.CoreConvertFromCodecError residual
 
 /-- [cbor_nopanic::SliceSink]
-    Source: 'src/lib.rs', lines 605:0-608:1 -/
+    Source: 'src/lib.rs', lines 606:0-609:1 -/
 structure SliceSink where
   buf : Array Std.U8 4096#usize
   len : Std.Usize
 
 /-- [cbor_nopanic::{cbor_nopanic::SliceSink}::new]:
-    Source: 'src/lib.rs', lines 613:4-618:5 -/
+    Source: 'src/lib.rs', lines 614:4-619:5 -/
 def SliceSink.new : Result SliceSink := do
   let a := Array.repeat 4096#usize 0#u8
   ok { buf := a, len := 0#usize }
 
 /-- [cbor_nopanic::{cbor_nopanic::SliceSink}::len]:
-    Source: 'src/lib.rs', lines 621:4-623:5 -/
+    Source: 'src/lib.rs', lines 622:4-624:5 -/
 def SliceSink.impl.len (self : SliceSink) : Result Std.Usize := do
   ok self.len
 
 /-- [cbor_nopanic::{cbor_nopanic::SliceSink}::write_bytes]:
-    Source: 'src/lib.rs', lines 629:4-652:5 -/
+    Source: 'src/lib.rs', lines 630:4-653:5 -/
 def SliceSink.write_bytes
   (self : SliceSink) (bytes : Slice Std.U8) :
   Result ((core.result.Result Unit CodecError) × SliceSink)
@@ -1205,7 +1205,7 @@ def SliceSink.write_bytes
         ok (core.result.Result.Ok (), { buf := a, len := end1 })
 
 /-- [cbor_nopanic::be_byte]:
-    Source: 'src/lib.rs', lines 660:0-665:1 -/
+    Source: 'src/lib.rs', lines 661:0-666:1 -/
 def be_byte
   (be : Array Std.U8 8#usize) (i : Std.Usize) :
   Result (core.result.Result Std.U8 CodecError)
@@ -1218,7 +1218,7 @@ def be_byte
   | some b => ok (core.result.Result.Ok b)
 
 /-- [cbor_nopanic::write_head]:
-    Source: 'src/lib.rs', lines 673:0-712:1 -/
+    Source: 'src/lib.rs', lines 674:0-713:1 -/
 def write_head
   (sink : SliceSink) (major_base : Std.U8) (arg : Std.U64) :
   Result ((core.result.Result Unit CodecError) × SliceSink)
@@ -1401,7 +1401,7 @@ def write_head
             ok (r1, sink)
 
 /-- [cbor_nopanic::write_bstr]:
-    Source: 'src/lib.rs', lines 720:0-727:1 -/
+    Source: 'src/lib.rs', lines 721:0-728:1 -/
 def write_bstr
   (sink : SliceSink) (bytes : Slice Std.U8) :
   Result ((core.result.Result Unit CodecError) × SliceSink)
@@ -1420,7 +1420,7 @@ def write_bstr
     ok (r1, sink1)
 
 /-- [cbor_nopanic::write_text]:
-    Source: 'src/lib.rs', lines 737:0-742:1 -/
+    Source: 'src/lib.rs', lines 738:0-743:1 -/
 def write_text
   (sink : SliceSink) (text : Slice Std.U8) :
   Result ((core.result.Result Unit CodecError) × SliceSink)
@@ -1439,7 +1439,7 @@ def write_text
     ok (r1, sink1)
 
 /-- [cbor_nopanic::write_array_header]:
-    Source: 'src/lib.rs', lines 750:0-752:1 -/
+    Source: 'src/lib.rs', lines 751:0-753:1 -/
 def write_array_header
   (sink : SliceSink) (len : Std.U64) :
   Result ((core.result.Result Unit CodecError) × SliceSink)
@@ -1447,14 +1447,14 @@ def write_array_header
   write_head sink MAJOR_ARRAY len
 
 /-- [cbor_nopanic::SigStructure]
-    Source: 'src/lib.rs', lines 759:0-764:1
+    Source: 'src/lib.rs', lines 760:0-765:1
     Visibility: public -/
 structure SigStructure where
   buf : Array Std.U8 4096#usize
   len : Std.Usize
 
 /-- [cbor_nopanic::build_sig_structure]:
-    Source: 'src/lib.rs', lines 774:0-802:1
+    Source: 'src/lib.rs', lines 775:0-803:1
     Visibility: public -/
 def build_sig_structure
   (typ : Typ) (protected1 : Slice Std.U8) (payload : Slice Std.U8) :
@@ -1606,5 +1606,42 @@ def build_sig_structure
   | core.ops.control_flow.ControlFlow.Break residual =>
     core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
       SigStructure CoseError.Insts.CoreConvertFromCodecError residual
+
+/-- [cbor_nopanic::Parsed]
+    Source: 'src/lib.rs', lines 811:0-818:1
+    Visibility: public -/
+structure Parsed where
+  kid : Array Std.U8 16#usize
+  typ : Typ
+  payload : Slice Std.U8
+
+/-- [cbor_nopanic::parse_sign1]:
+    Source: 'src/lib.rs', lines 837:0-846:1
+    Visibility: public -/
+def parse_sign1
+  (bytes : Slice Std.U8) : Result (core.result.Result Parsed CoseError) := do
+  let r ← read_sign1_envelope bytes
+  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+  match cf with
+  | core.ops.control_flow.ControlFlow.Continue e =>
+    let r1 ← decode_protected_header e.«protected»
+    let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r1
+    match cf1 with
+    | core.ops.control_flow.ControlFlow.Continue val =>
+      let (kid, typ) := val
+      let r2 ← build_sig_structure typ e.«protected» e.payload
+      let cf2 ← core.result.Result.Insts.CoreOpsTry.branch r2
+      match cf2 with
+      | core.ops.control_flow.ControlFlow.Continue _ =>
+        ok (core.result.Result.Ok { kid, typ, payload := e.payload })
+      | core.ops.control_flow.ControlFlow.Break residual =>
+        core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+          Parsed (core.convert.FromSame CoseError) residual
+    | core.ops.control_flow.ControlFlow.Break residual =>
+      core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+        Parsed (core.convert.FromSame CoseError) residual
+  | core.ops.control_flow.ControlFlow.Break residual =>
+    core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+      Parsed (core.convert.FromSame CoseError) residual
 
 end cbor_nopanic
