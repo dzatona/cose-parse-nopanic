@@ -1,4 +1,4 @@
-
+.local/
 /target
 /rust/target
 **/.lake
