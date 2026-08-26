@@ -19,14 +19,16 @@ three `next_map_key` calls, not a walker.
 Layer 5 is also proved: `build_sig_structure` returns `ok _` (a filled
 `[u8; 4096]` `Sig_structure`, or a normal `CoseError`) for every `Typ` and
 pair of `&[u8]`. `BufferTooSmall` is `ok(Err)`.
-**Goal:** no-panic of the COSE_Sign1 envelope parse (array4 + bstrs + protected
-map + `Sig_structure` into `[u8; 4096]`). Signature / Ed25519 is not proved.
+**Finale:** `parse_sign1` does not panic on any `&[u8]`. That is the
+envelope parse (`verify` minus crypto): array4 + bstrs + protected map +
+`Sig_structure` into `[u8; 4096]`. Signature / Ed25519 is not proved.
 
 Reports: [`reports/PROOF.md`](reports/PROOF.md),
 [`reports/PROOF-bstr.md`](reports/PROOF-bstr.md),
 [`reports/PROOF-envelope.md`](reports/PROOF-envelope.md),
 [`reports/PROOF-header.md`](reports/PROOF-header.md),
 [`reports/PROOF-sig.md`](reports/PROOF-sig.md),
+[`reports/PROOF-parse.md`](reports/PROOF-parse.md),
 [`reports/EXTRACT.md`](reports/EXTRACT.md),
 [`reports/TOOLCHAIN.md`](reports/TOOLCHAIN.md).
 
