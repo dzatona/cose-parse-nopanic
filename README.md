@@ -8,6 +8,7 @@ Work and name: Dmitrii Zatona.
 
 **Proved:** for every `&[u8]`, `read_uint` returns Aeneas `ok _` (a decoded
 `u64` or a normal `CodecError`); it does not panic. Not RFC 8949 correctness.
+**Goal:** `verify_no_panic` on `COSE_Sign1::verify`; current proof is still step 1.
 
 Reports: [`reports/PROOF.md`](reports/PROOF.md),
 [`reports/EXTRACT.md`](reports/EXTRACT.md), [`reports/TOOLCHAIN.md`](reports/TOOLCHAIN.md).
