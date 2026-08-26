@@ -1,4 +1,4 @@
-# Toolchain (step 1)
+# Toolchain
 
 Recorded 2026-08-26 on aarch64-apple-darwin. Pins match the Binder spike
 README (`runtimeverification/kernel-rust-verification-spike`) except where

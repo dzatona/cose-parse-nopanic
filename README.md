@@ -1,43 +1,45 @@
 # cose-parse-nopanic
 
-Machine-checked no-panic proof for one loop-free path in a hand-written
-RFC 8949 deterministic CBOR decoder (the layer under `COSE_Sign1`).
+Machine-checked no-panic proof of a `COSE_Sign1` envelope parse: the
+pre-crypto prefix of `verify`. Not Ed25519. Not RFC 8949 / RFC 8152
+correctness.
 
 Not the KNTRL product tree. Not a Runtime Verification repository.
-Work and name: Dmitrii Zatona. GitHub `dzatona/cose-parse-nopanic`.
-Crate/Lean remain `cbor_nopanic` until the next extraction.
+Work and name: Dmitrii Zatona.
 
-**Proved:** for every `&[u8]`, `read_uint` returns Aeneas `ok _` (a decoded
-`u64` or a normal `CodecError`); it does not panic. Not RFC 8949 correctness.
-Layer 2 is also proved: `read_bstr` and `read_bstr_fixed_64` return `ok _`
-(a slice / 64-byte array or a normal `CodecError`) for every `&[u8]`.
-Layer 3 is also proved: `read_sign1_envelope` returns `ok _` (the array-of-4
-slots or a normal `CoseError`) for every `&[u8]`.
-Layer 4 is also proved: `decode_protected_header` returns `ok _` (kid +
-`Typ`, or a normal `CoseError`) for every `&[u8]`. The `{1,4,100}` map is
-three `next_map_key` calls, not a walker.
-Layer 5 is also proved: `build_sig_structure` returns `ok _` (a filled
-`[u8; 4096]` `Sig_structure`, or a normal `CoseError`) for every `Typ` and
-pair of `&[u8]`. `BufferTooSmall` is `ok(Err)`.
-**Finale:** `parse_sign1` does not panic on any `&[u8]`. That is the
-envelope parse (`verify` minus crypto): array4 + bstrs + protected map +
-`Sig_structure` into `[u8; 4096]`. Signature / Ed25519 is not proved.
+**Proved:** for every `&[u8]`, `parse_sign1` returns Aeneas `ok _` — a
+`Parsed` envelope or a normal `CoseError`. It does not panic.
 
-Reports: [`reports/PROOF.md`](reports/PROOF.md),
-[`reports/PROOF-bstr.md`](reports/PROOF-bstr.md),
-[`reports/PROOF-envelope.md`](reports/PROOF-envelope.md),
-[`reports/PROOF-header.md`](reports/PROOF-header.md),
-[`reports/PROOF-sig.md`](reports/PROOF-sig.md),
-[`reports/PROOF-parse.md`](reports/PROOF-parse.md),
-[`reports/EXTRACT.md`](reports/EXTRACT.md),
-[`reports/TOOLCHAIN.md`](reports/TOOLCHAIN.md).
+That path is: array of 4, protected/payload/signature bstrs, empty
+unprotected map, protected header `{1: -8, 4: kid, 100: typ}`, then
+`Sig_structure` into `[u8; 4096]`. `BufferTooSmall` is `ok(Err)`.
+
+**Not proved:** signature verification, `verify_strict`, public keys,
+payload decode, trust-set.
+
+The Rust crate and Lean namespace are still `cbor_nopanic` (layer-1
+extraction name). Reports below are the proof artifacts.
+
+Reports: [`reports/PROOF-parse.md`](reports/PROOF-parse.md)
+(finale), [`reports/EXTRACT.md`](reports/EXTRACT.md),
+[`reports/TOOLCHAIN.md`](reports/TOOLCHAIN.md). Layer proofs:
+[`PROOF.md`](reports/PROOF.md),
+[`PROOF-bstr.md`](reports/PROOF-bstr.md),
+[`PROOF-envelope.md`](reports/PROOF-envelope.md),
+[`PROOF-header.md`](reports/PROOF-header.md),
+[`PROOF-sig.md`](reports/PROOF-sig.md).
 
 ## Reproduce
 
+Pin Charon `909ff09a` / Aeneas `c2015b86` / Lean 4.31.0 — install
+notes in [`reports/TOOLCHAIN.md`](reports/TOOLCHAIN.md). Then point
+`lean/lakefile.lean` at your Aeneas `backends/lean` checkout and:
+
 ```sh
 cd rust && cargo test
-# Charon 909ff09a / Aeneas c2015b86 / Lean 4.31.0 — see reports/TOOLCHAIN.md
+export PATH="$HOME/charon/bin:$PATH"
 charon cargo --preset=aeneas --dest-file ../llbc/cbor_nopanic.llbc
+eval $(opam env --switch=5.3.0)
 aeneas -backend lean -dest ../lean ../llbc/cbor_nopanic.llbc
 cd ../lean && lake build
 ```
