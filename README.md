@@ -41,6 +41,6 @@ cd rust && cargo test
 export PATH="$HOME/charon/bin:$PATH"
 charon cargo --preset=aeneas --dest-file ../llbc/cose_parse_nopanic.llbc
 eval $(opam env --switch=5.3.0)
-aeneas -backend lean -dest ../lean ../llbc/cose_parse_nopanic.llbc
+~/aeneas/bin/aeneas -backend lean -dest ../lean ../llbc/cose_parse_nopanic.llbc
 cd ../lean && lake build
 ```
