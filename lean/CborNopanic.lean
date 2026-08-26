@@ -15,7 +15,7 @@ set_option maxRecDepth 2048
 namespace cbor_nopanic
 
 /-- [cbor_nopanic::CodecError]
-    Source: 'src/lib.rs', lines 21:0-38:1
+    Source: 'src/lib.rs', lines 24:0-53:1
     Visibility: public -/
 @[discriminant isize]
 inductive CodecError where
@@ -26,9 +26,12 @@ inductive CodecError where
 | DisallowedMajorType : CodecError
 | LengthOverflow : CodecError
 | WrongLength : CodecError
+| TrailingBytes : CodecError
+| MalformedEnvelope : CodecError
+| NonEmptyUnprotectedHeader : CodecError
 
 /-- [cbor_nopanic::{impl core::fmt::Debug for cbor_nopanic::CodecError}::fmt]:
-    Source: 'src/lib.rs', lines 20:9-20:14
+    Source: 'src/lib.rs', lines 23:9-23:14
     Visibility: public -/
 def CodecError.Insts.CoreFmtDebug.fmt
   (self : CodecError) (f : core.fmt.Formatter) :
@@ -49,44 +52,50 @@ def CodecError.Insts.CoreFmtDebug.fmt
     core.fmt.Formatter.write_str f (toStr "LengthOverflow")
   | CodecError.WrongLength =>
     core.fmt.Formatter.write_str f (toStr "WrongLength")
+  | CodecError.TrailingBytes =>
+    core.fmt.Formatter.write_str f (toStr "TrailingBytes")
+  | CodecError.MalformedEnvelope =>
+    core.fmt.Formatter.write_str f (toStr "MalformedEnvelope")
+  | CodecError.NonEmptyUnprotectedHeader =>
+    core.fmt.Formatter.write_str f (toStr "NonEmptyUnprotectedHeader")
 
 /-- Trait implementation: [cbor_nopanic::{impl core::fmt::Debug for cbor_nopanic::CodecError}]
-    Source: 'src/lib.rs', lines 20:9-20:14 -/
+    Source: 'src/lib.rs', lines 23:9-23:14 -/
 @[reducible]
 def CodecError.Insts.CoreFmtDebug : core.fmt.Debug CodecError := {
   fmt := CodecError.Insts.CoreFmtDebug.fmt
 }
 
 /-- [cbor_nopanic::{impl core::clone::Clone for cbor_nopanic::CodecError}::clone]:
-    Source: 'src/lib.rs', lines 20:16-20:21
+    Source: 'src/lib.rs', lines 23:16-23:21
     Visibility: public -/
 def CodecError.Insts.CoreCloneClone.clone
   (self : CodecError) : Result CodecError := do
   ok self
 
 /-- Trait implementation: [cbor_nopanic::{impl core::clone::Clone for cbor_nopanic::CodecError}]
-    Source: 'src/lib.rs', lines 20:16-20:21 -/
+    Source: 'src/lib.rs', lines 23:16-23:21 -/
 @[reducible]
 def CodecError.Insts.CoreCloneClone : core.clone.Clone CodecError := {
   clone := CodecError.Insts.CoreCloneClone.clone
 }
 
 /-- Trait implementation: [cbor_nopanic::{impl core::marker::Copy for cbor_nopanic::CodecError}]
-    Source: 'src/lib.rs', lines 20:23-20:27 -/
+    Source: 'src/lib.rs', lines 23:23-23:27 -/
 @[reducible]
 def CodecError.Insts.CoreMarkerCopy : core.marker.Copy CodecError := {
   cloneInst := CodecError.Insts.CoreCloneClone
 }
 
 /-- Trait implementation: [cbor_nopanic::{impl core::marker::StructuralPartialEq for cbor_nopanic::CodecError}]
-    Source: 'src/lib.rs', lines 20:29-20:38 -/
+    Source: 'src/lib.rs', lines 23:29-23:38 -/
 @[reducible]
 def CodecError.Insts.CoreMarkerStructuralPartialEq :
   core.marker.StructuralPartialEq CodecError := {
 }
 
 /-- [cbor_nopanic::{impl core::cmp::PartialEq<cbor_nopanic::CodecError> for cbor_nopanic::CodecError}::eq]:
-    Source: 'src/lib.rs', lines 20:29-20:38
+    Source: 'src/lib.rs', lines 23:29-23:38
     Visibility: public -/
 def CodecError.Insts.CoreCmpPartialEqCodecError.eq
   (self : CodecError) (other : CodecError) : Result Bool := do
@@ -95,7 +104,7 @@ def CodecError.Insts.CoreCmpPartialEqCodecError.eq
   ok (self1 = other1)
 
 /-- Trait implementation: [cbor_nopanic::{impl core::cmp::PartialEq<cbor_nopanic::CodecError> for cbor_nopanic::CodecError}]
-    Source: 'src/lib.rs', lines 20:29-20:38 -/
+    Source: 'src/lib.rs', lines 23:29-23:38 -/
 @[reducible]
 def CodecError.Insts.CoreCmpPartialEqCodecError : core.cmp.PartialEq CodecError
   CodecError := {
@@ -103,14 +112,14 @@ def CodecError.Insts.CoreCmpPartialEqCodecError : core.cmp.PartialEq CodecError
 }
 
 /-- [cbor_nopanic::{impl core::cmp::Eq for cbor_nopanic::CodecError}::assert_fields_are_eq]:
-    Source: 'src/lib.rs', lines 20:40-20:42
+    Source: 'src/lib.rs', lines 23:40-23:42
     Visibility: public -/
 def CodecError.Insts.CoreCmpEq.assert_fields_are_eq
   (self : CodecError) : Result Unit := do
   ok ()
 
 /-- Trait implementation: [cbor_nopanic::{impl core::cmp::Eq for cbor_nopanic::CodecError}]
-    Source: 'src/lib.rs', lines 20:40-20:42 -/
+    Source: 'src/lib.rs', lines 23:40-23:42 -/
 @[reducible]
 def CodecError.Insts.CoreCmpEq : core.cmp.Eq CodecError := {
   partialEqInst := CodecError.Insts.CoreCmpPartialEqCodecError
@@ -118,36 +127,61 @@ def CodecError.Insts.CoreCmpEq : core.cmp.Eq CodecError := {
 }
 
 /-- [cbor_nopanic::MAJOR_UNSIGNED]
-    Source: 'src/lib.rs', lines 41:0-41:32 -/
+    Source: 'src/lib.rs', lines 56:0-56:32 -/
 @[global_simps, irreducible] def MAJOR_UNSIGNED : Std.U8 := 0#u8
 
 /-- [cbor_nopanic::MAJOR_BSTR]
-    Source: 'src/lib.rs', lines 43:0-43:28 -/
+    Source: 'src/lib.rs', lines 58:0-58:28 -/
 @[global_simps, irreducible] def MAJOR_BSTR : Std.U8 := 64#u8
 
+/-- [cbor_nopanic::MAJOR_ARRAY]
+    Source: 'src/lib.rs', lines 60:0-60:29 -/
+@[global_simps, irreducible] def MAJOR_ARRAY : Std.U8 := 128#u8
+
+/-- [cbor_nopanic::MAJOR_MAP]
+    Source: 'src/lib.rs', lines 62:0-62:27 -/
+@[global_simps, irreducible] def MAJOR_MAP : Std.U8 := 160#u8
+
 /-- [cbor_nopanic::MAJOR_MASK]
-    Source: 'src/lib.rs', lines 45:0-45:28 -/
+    Source: 'src/lib.rs', lines 64:0-64:28 -/
 @[global_simps, irreducible] def MAJOR_MASK : Std.U8 := 224#u8
 
 /-- [cbor_nopanic::ADDITIONAL_MASK]
-    Source: 'src/lib.rs', lines 47:0-47:33 -/
+    Source: 'src/lib.rs', lines 66:0-66:33 -/
 @[global_simps, irreducible] def ADDITIONAL_MASK : Std.U8 := 31#u8
 
 /-- [cbor_nopanic::Reader]
-    Source: 'src/lib.rs', lines 55:0-58:1
+    Source: 'src/lib.rs', lines 74:0-77:1
     Visibility: public -/
 structure Reader where
   buf : Slice Std.U8
   pos : Std.Usize
 
 /-- [cbor_nopanic::{cbor_nopanic::Reader<'a>}::new]:
-    Source: 'src/lib.rs', lines 63:4-65:5
+    Source: 'src/lib.rs', lines 82:4-84:5
     Visibility: public -/
 def Reader.new (buf : Slice Std.U8) : Result Reader := do
   ok { buf, pos := 0#usize }
 
+/-- [cbor_nopanic::{cbor_nopanic::Reader<'a>}::is_empty]:
+    Source: 'src/lib.rs', lines 88:4-90:5
+    Visibility: public -/
+def Reader.is_empty (self : Reader) : Result Bool := do
+  let i := Slice.len self.buf
+  ok (self.pos = i)
+
+/-- [cbor_nopanic::{cbor_nopanic::Reader<'a>}::finish]:
+    Source: 'src/lib.rs', lines 96:4-102:5
+    Visibility: public -/
+def Reader.finish
+  (self : Reader) : Result (core.result.Result Unit CodecError) := do
+  let b ← Reader.is_empty self
+  if b
+  then ok (core.result.Result.Ok ())
+  else ok (core.result.Result.Err CodecError.TrailingBytes)
+
 /-- [cbor_nopanic::{cbor_nopanic::Reader<'a>}::take]:
-    Source: 'src/lib.rs', lines 71:4-85:5 -/
+    Source: 'src/lib.rs', lines 108:4-122:5 -/
 def Reader.take
   (self : Reader) (n : Std.Usize) :
   Result ((core.result.Result (Slice Std.U8) CodecError) × Reader)
@@ -164,7 +198,7 @@ def Reader.take
     | some out => ok (core.result.Result.Ok out, { self with pos := end1 })
 
 /-- [cbor_nopanic::get_u8]:
-    Source: 'src/lib.rs', lines 216:0-221:1 -/
+    Source: 'src/lib.rs', lines 269:0-274:1 -/
 def get_u8
   (bytes : Slice Std.U8) (i : Std.Usize) :
   Result (core.result.Result Std.U8 CodecError)
@@ -176,7 +210,7 @@ def get_u8
   | some b => ok (core.result.Result.Ok b)
 
 /-- [cbor_nopanic::{cbor_nopanic::Reader<'a>}::read_head]:
-    Source: 'src/lib.rs', lines 96:4-158:5 -/
+    Source: 'src/lib.rs', lines 133:4-195:5 -/
 def Reader.read_head
   (self : Reader) (major_base : Std.U8) :
   Result ((core.result.Result Std.U64 CodecError) × Reader)
@@ -449,7 +483,7 @@ def Reader.read_head
     ok (r1, self1)
 
 /-- [cbor_nopanic::{cbor_nopanic::Reader<'a>}::read_uint]:
-    Source: 'src/lib.rs', lines 166:4-168:5
+    Source: 'src/lib.rs', lines 203:4-205:5
     Visibility: public -/
 def Reader.read_uint
   (self : Reader) :
@@ -458,7 +492,7 @@ def Reader.read_uint
   Reader.read_head self MAJOR_UNSIGNED
 
 /-- [cbor_nopanic::{cbor_nopanic::Reader<'a>}::read_bstr]:
-    Source: 'src/lib.rs', lines 177:4-187:5
+    Source: 'src/lib.rs', lines 214:4-224:5
     Visibility: public -/
 def Reader.read_bstr
   (self : Reader) :
@@ -480,7 +514,7 @@ def Reader.read_bstr
     ok (r1, self1)
 
 /-- [cbor_nopanic::{cbor_nopanic::Reader<'a>}::read_bstr_fixed_64]:
-    Source: 'src/lib.rs', lines 198:4-207:5
+    Source: 'src/lib.rs', lines 235:4-244:5
     Visibility: public -/
 def Reader.read_bstr_fixed_64
   (self : Reader) :
@@ -502,8 +536,26 @@ def Reader.read_bstr_fixed_64
         (Array Std.U8 64#usize) (core.convert.FromSame CodecError) residual
     ok (r1, self1)
 
+/-- [cbor_nopanic::{cbor_nopanic::Reader<'a>}::read_array_header]:
+    Source: 'src/lib.rs', lines 250:4-252:5
+    Visibility: public -/
+def Reader.read_array_header
+  (self : Reader) :
+  Result ((core.result.Result Std.U64 CodecError) × Reader)
+  := do
+  Reader.read_head self MAJOR_ARRAY
+
+/-- [cbor_nopanic::{cbor_nopanic::Reader<'a>}::read_map_header]:
+    Source: 'src/lib.rs', lines 258:4-260:5
+    Visibility: public -/
+def Reader.read_map_header
+  (self : Reader) :
+  Result ((core.result.Result Std.U64 CodecError) × Reader)
+  := do
+  Reader.read_head self MAJOR_MAP
+
 /-- [cbor_nopanic::read_uint]:
-    Source: 'src/lib.rs', lines 229:0-233:1
+    Source: 'src/lib.rs', lines 282:0-286:1
     Visibility: public -/
 def read_uint
   (buf : Slice Std.U8) : Result (core.result.Result Std.U64 CodecError) := do
@@ -512,7 +564,7 @@ def read_uint
   ok r
 
 /-- [cbor_nopanic::read_bstr]:
-    Source: 'src/lib.rs', lines 241:0-245:1
+    Source: 'src/lib.rs', lines 294:0-298:1
     Visibility: public -/
 def read_bstr
   (buf : Slice Std.U8) :
@@ -523,7 +575,7 @@ def read_bstr
   ok r
 
 /-- [cbor_nopanic::read_bstr_fixed_64]:
-    Source: 'src/lib.rs', lines 253:0-257:1
+    Source: 'src/lib.rs', lines 306:0-310:1
     Visibility: public -/
 def read_bstr_fixed_64
   (buf : Slice Std.U8) :
@@ -532,5 +584,89 @@ def read_bstr_fixed_64
   let reader ← Reader.new buf
   let (r, _) ← Reader.read_bstr_fixed_64 reader
   ok r
+
+/-- [cbor_nopanic::read_array_header]:
+    Source: 'src/lib.rs', lines 318:0-322:1
+    Visibility: public -/
+def read_array_header
+  (buf : Slice Std.U8) : Result (core.result.Result Std.U64 CodecError) := do
+  let reader ← Reader.new buf
+  let (r, _) ← Reader.read_array_header reader
+  ok r
+
+/-- [cbor_nopanic::read_map_header]:
+    Source: 'src/lib.rs', lines 330:0-334:1
+    Visibility: public -/
+def read_map_header
+  (buf : Slice Std.U8) : Result (core.result.Result Std.U64 CodecError) := do
+  let reader ← Reader.new buf
+  let (r, _) ← Reader.read_map_header reader
+  ok r
+
+/-- [cbor_nopanic::Envelope]
+    Source: 'src/lib.rs', lines 342:0-349:1
+    Visibility: public -/
+structure Envelope where
+  «protected» : Slice Std.U8
+  payload : Slice Std.U8
+  signature : Array Std.U8 64#usize
+
+/-- [cbor_nopanic::read_sign1_envelope]:
+    Source: 'src/lib.rs', lines 368:0-387:1
+    Visibility: public -/
+def read_sign1_envelope
+  (buf : Slice Std.U8) : Result (core.result.Result Envelope CodecError) := do
+  let reader ← Reader.new buf
+  let (r, reader1) ← Reader.read_array_header reader
+  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+  match cf with
+  | core.ops.control_flow.ControlFlow.Continue val =>
+    if val != 4#u64
+    then ok (core.result.Result.Err CodecError.MalformedEnvelope)
+    else
+      let (r1, reader2) ← Reader.read_bstr reader1
+      let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r1
+      match cf1 with
+      | core.ops.control_flow.ControlFlow.Continue val1 =>
+        let (r2, reader3) ← Reader.read_map_header reader2
+        let cf2 ← core.result.Result.Insts.CoreOpsTry.branch r2
+        match cf2 with
+        | core.ops.control_flow.ControlFlow.Continue val2 =>
+          if val2 != 0#u64
+          then ok (core.result.Result.Err CodecError.NonEmptyUnprotectedHeader)
+          else
+            let (r3, reader4) ← Reader.read_bstr reader3
+            let cf3 ← core.result.Result.Insts.CoreOpsTry.branch r3
+            match cf3 with
+            | core.ops.control_flow.ControlFlow.Continue val3 =>
+              let (r4, reader5) ← Reader.read_bstr_fixed_64 reader4
+              let cf4 ← core.result.Result.Insts.CoreOpsTry.branch r4
+              match cf4 with
+              | core.ops.control_flow.ControlFlow.Continue val4 =>
+                let r5 ← Reader.finish reader5
+                let cf5 ← core.result.Result.Insts.CoreOpsTry.branch r5
+                match cf5 with
+                | core.ops.control_flow.ControlFlow.Continue _ =>
+                  ok (core.result.Result.Ok
+                    { «protected» := val1, payload := val3, signature := val4
+                    })
+                | core.ops.control_flow.ControlFlow.Break residual =>
+                  core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+                    Envelope (core.convert.FromSame CodecError) residual
+              | core.ops.control_flow.ControlFlow.Break residual =>
+                core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+                  Envelope (core.convert.FromSame CodecError) residual
+            | core.ops.control_flow.ControlFlow.Break residual =>
+              core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+                Envelope (core.convert.FromSame CodecError) residual
+        | core.ops.control_flow.ControlFlow.Break residual =>
+          core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+            Envelope (core.convert.FromSame CodecError) residual
+      | core.ops.control_flow.ControlFlow.Break residual =>
+        core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+          Envelope (core.convert.FromSame CodecError) residual
+  | core.ops.control_flow.ControlFlow.Break residual =>
+    core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+      Envelope (core.convert.FromSame CodecError) residual
 
 end cbor_nopanic

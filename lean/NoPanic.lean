@@ -423,10 +423,120 @@ theorem read_bstr_fixed_64_no_panic (buf : Slice U8) :
   rcases pair with ⟨r, _⟩
   exact AlwaysOk.of_ok r
 
--- Expected: propext, Classical.choice, Quot.sound. See reports/PROOF.md and
--- reports/PROOF-bstr.md.
+theorem is_empty_no_panic (self : Reader) : AlwaysOk (Reader.is_empty self) := by
+  unfold Reader.is_empty
+  exact AlwaysOk.of_ok _
+
+theorem finish_no_panic (self : Reader) : AlwaysOk (Reader.finish self) := by
+  unfold Reader.finish
+  apply AlwaysOk.bind (is_empty_no_panic self)
+  intro b
+  apply AlwaysOk.ite <;> exact AlwaysOk.of_ok _
+
+theorem Reader_read_array_header_no_panic (self : Reader) :
+    AlwaysOk (Reader.read_array_header self) := by
+  unfold Reader.read_array_header
+  exact read_head_no_panic self MAJOR_ARRAY
+
+theorem Reader_read_map_header_no_panic (self : Reader) :
+    AlwaysOk (Reader.read_map_header self) := by
+  unfold Reader.read_map_header
+  exact read_head_no_panic self MAJOR_MAP
+
+/-- For every byte slice, `read_array_header` returns `ok _` (a count or `CodecError`). -/
+theorem read_array_header_no_panic (buf : Slice U8) :
+    ∃ r, read_array_header buf = ok r := by
+  unfold read_array_header
+  apply AlwaysOk.bind (new_no_panic buf)
+  intro reader
+  apply AlwaysOk.bind (Reader_read_array_header_no_panic reader)
+  intro pair
+  rcases pair with ⟨r, _⟩
+  exact AlwaysOk.of_ok r
+
+/-- For every byte slice, `read_map_header` returns `ok _` (a count or `CodecError`). -/
+theorem read_map_header_no_panic (buf : Slice U8) :
+    ∃ r, read_map_header buf = ok r := by
+  unfold read_map_header
+  apply AlwaysOk.bind (new_no_panic buf)
+  intro reader
+  apply AlwaysOk.bind (Reader_read_map_header_no_panic reader)
+  intro pair
+  rcases pair with ⟨r, _⟩
+  exact AlwaysOk.of_ok r
+
+/-- For every byte slice, `read_sign1_envelope` returns `ok _` (`Envelope` or `CodecError`). -/
+theorem read_sign1_envelope_no_panic (buf : Slice U8) :
+    ∃ r, read_sign1_envelope buf = ok r := by
+  unfold read_sign1_envelope
+  apply AlwaysOk.bind (new_no_panic buf)
+  intro reader
+  apply AlwaysOk.bind (Reader_read_array_header_no_panic reader)
+  intro pair
+  rcases pair with ⟨r, reader1⟩
+  apply AlwaysOk.bind (branch_no_panic r)
+  intro cf
+  cases cf with
+  | Break residual =>
+    exact from_residual_no_panic (T := Envelope) residual
+  | Continue val =>
+    apply AlwaysOk.ite
+    · exact AlwaysOk.of_ok _
+    · apply AlwaysOk.bind (Reader_read_bstr_no_panic reader1)
+      intro pair1
+      rcases pair1 with ⟨r1, reader2⟩
+      apply AlwaysOk.bind (branch_no_panic r1)
+      intro cf1
+      cases cf1 with
+      | Break residual =>
+        exact from_residual_no_panic (T := Envelope) residual
+      | Continue val1 =>
+        apply AlwaysOk.bind (Reader_read_map_header_no_panic reader2)
+        intro pair2
+        rcases pair2 with ⟨r2, reader3⟩
+        apply AlwaysOk.bind (branch_no_panic r2)
+        intro cf2
+        cases cf2 with
+        | Break residual =>
+          exact from_residual_no_panic (T := Envelope) residual
+        | Continue val2 =>
+          apply AlwaysOk.ite
+          · exact AlwaysOk.of_ok _
+          · apply AlwaysOk.bind (Reader_read_bstr_no_panic reader3)
+            intro pair3
+            rcases pair3 with ⟨r3, reader4⟩
+            apply AlwaysOk.bind (branch_no_panic r3)
+            intro cf3
+            cases cf3 with
+            | Break residual =>
+              exact from_residual_no_panic (T := Envelope) residual
+            | Continue val3 =>
+              apply AlwaysOk.bind (Reader_read_bstr_fixed_64_no_panic reader4)
+              intro pair4
+              rcases pair4 with ⟨r4, reader5⟩
+              apply AlwaysOk.bind (branch_no_panic r4)
+              intro cf4
+              cases cf4 with
+              | Break residual =>
+                exact from_residual_no_panic (T := Envelope) residual
+              | Continue val4 =>
+                apply AlwaysOk.bind (finish_no_panic reader5)
+                intro r5
+                apply AlwaysOk.bind (branch_no_panic r5)
+                intro cf5
+                cases cf5 with
+                | Break residual =>
+                  exact from_residual_no_panic (T := Envelope) residual
+                | Continue _ =>
+                  exact AlwaysOk.of_ok _
+
+-- Expected: propext, Classical.choice, Quot.sound. See reports/PROOF.md,
+-- reports/PROOF-bstr.md, and reports/PROOF-envelope.md.
 #print axioms read_uint_no_panic
 #print axioms read_bstr_no_panic
 #print axioms read_bstr_fixed_64_no_panic
+#print axioms read_array_header_no_panic
+#print axioms read_map_header_no_panic
+#print axioms read_sign1_envelope_no_panic
 
 end NoPanic
