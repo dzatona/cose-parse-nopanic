@@ -12,7 +12,7 @@ Crate/Lean remain `cbor_nopanic` until the next extraction.
 Layer 2 is also proved: `read_bstr` and `read_bstr_fixed_64` return `ok _`
 (a slice / 64-byte array or a normal `CodecError`) for every `&[u8]`.
 Layer 3 is also proved: `read_sign1_envelope` returns `ok _` (the array-of-4
-slots or a normal `CodecError`) for every `&[u8]`.
+slots or a normal `CoseError`) for every `&[u8]`.
 **Goal:** no-panic of the COSE_Sign1 envelope parse (array4 + bstrs + protected
 map + `Sig_structure` into `[u8; 4096]`). Signature / Ed25519 is not proved.
 

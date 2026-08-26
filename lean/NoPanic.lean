@@ -4,7 +4,8 @@
 -- Panic model (Binder spike / panic model): Aeneas puts every function in the `Result`
 -- monad `ok v | fail e | div`. A panic (overflow, OOB index, unwrap, ...) is
 -- exactly `fail`. No-panic is `∀ inputs, ∃ v, f inputs = ok v`. A codec
--- rejection is `ok (Result.Err CodecError)` — still `ok`.
+-- rejection is `ok (Result.Err CodecError)` (or `CoseError` on the envelope
+-- path) — still `ok`.
 --
 -- This theorem does not claim RFC 8949 correctness.
 
@@ -77,6 +78,18 @@ theorem from_residual_no_panic {T}
   | Err e =>
     simp [core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual,
       core.convert.FromSame, bind_tc_ok, AlwaysOk]
+
+theorem from_cose_residual_no_panic {T}
+    (residual : core.result.Result core.convert.Infallible CodecError) :
+    AlwaysOk
+      (core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+        T CoseError.Insts.CoreConvertFromCodecError residual) := by
+  cases residual with
+  | Ok x => nomatch x
+  | Err e =>
+    simp [core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual,
+      CoseError.Insts.CoreConvertFromCodecError,
+      CoseError.Insts.CoreConvertFromCodecError.from, bind_tc_ok, AlwaysOk]
 
 theorem new_no_panic (buf : Slice U8) : AlwaysOk (Reader.new buf) :=
   ⟨_, rfl⟩
@@ -465,7 +478,7 @@ theorem read_map_header_no_panic (buf : Slice U8) :
   rcases pair with ⟨r, _⟩
   exact AlwaysOk.of_ok r
 
-/-- For every byte slice, `read_sign1_envelope` returns `ok _` (`Envelope` or `CodecError`). -/
+/-- For every byte slice, `read_sign1_envelope` returns `ok _` (`Envelope` or `CoseError`). -/
 theorem read_sign1_envelope_no_panic (buf : Slice U8) :
     ∃ r, read_sign1_envelope buf = ok r := by
   unfold read_sign1_envelope
@@ -478,7 +491,7 @@ theorem read_sign1_envelope_no_panic (buf : Slice U8) :
   intro cf
   cases cf with
   | Break residual =>
-    exact from_residual_no_panic (T := Envelope) residual
+    exact from_cose_residual_no_panic (T := Envelope) residual
   | Continue val =>
     apply AlwaysOk.ite
     · exact AlwaysOk.of_ok _
@@ -489,7 +502,7 @@ theorem read_sign1_envelope_no_panic (buf : Slice U8) :
       intro cf1
       cases cf1 with
       | Break residual =>
-        exact from_residual_no_panic (T := Envelope) residual
+        exact from_cose_residual_no_panic (T := Envelope) residual
       | Continue val1 =>
         apply AlwaysOk.bind (Reader_read_map_header_no_panic reader2)
         intro pair2
@@ -498,7 +511,7 @@ theorem read_sign1_envelope_no_panic (buf : Slice U8) :
         intro cf2
         cases cf2 with
         | Break residual =>
-          exact from_residual_no_panic (T := Envelope) residual
+          exact from_cose_residual_no_panic (T := Envelope) residual
         | Continue val2 =>
           apply AlwaysOk.ite
           · exact AlwaysOk.of_ok _
@@ -509,7 +522,7 @@ theorem read_sign1_envelope_no_panic (buf : Slice U8) :
             intro cf3
             cases cf3 with
             | Break residual =>
-              exact from_residual_no_panic (T := Envelope) residual
+              exact from_cose_residual_no_panic (T := Envelope) residual
             | Continue val3 =>
               apply AlwaysOk.bind (Reader_read_bstr_fixed_64_no_panic reader4)
               intro pair4
@@ -518,7 +531,7 @@ theorem read_sign1_envelope_no_panic (buf : Slice U8) :
               intro cf4
               cases cf4 with
               | Break residual =>
-                exact from_residual_no_panic (T := Envelope) residual
+                exact from_cose_residual_no_panic (T := Envelope) residual
               | Continue val4 =>
                 apply AlwaysOk.bind (finish_no_panic reader5)
                 intro r5
@@ -526,7 +539,7 @@ theorem read_sign1_envelope_no_panic (buf : Slice U8) :
                 intro cf5
                 cases cf5 with
                 | Break residual =>
-                  exact from_residual_no_panic (T := Envelope) residual
+                  exact from_cose_residual_no_panic (T := Envelope) residual
                 | Continue _ =>
                   exact AlwaysOk.of_ok _
 

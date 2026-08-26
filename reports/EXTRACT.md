@@ -168,9 +168,46 @@ casts, ed25519, KNTRL `Typ`, payload, encoder.
 
 # EXTRACT — `read_sign1_envelope` path (layer 3)
 
-Same source files and provenance hashes as the layer-1 table above, plus
-`kntrl-license-core/src/cose/mod.rs` `verify` lines 221–234 for control flow
-only. Destination is still `rust/src/lib.rs`.
+Same CBOR source files and provenance hashes as the layer-1 table above, plus
+`kntrl-license-core/src/cose/mod.rs` (hashed below). Destination is still
+`rust/src/lib.rs`.
+
+## Provenance (layer 3)
+
+Local checkout: `/Users/dzatona/Sites/MacExchange/kntrl-org/api-kntrl-org`  
+HEAD: `206ec5ecab0f579d538eac7897434d9a2f43f058`  
+Last commit touching `kntrl-license-core/src/cose/mod.rs`:
+`0a2f9a176ec041aaf38c4775473cd8e41406867a` `docs: fix rustdoc private and feature-gated links`
+
+| File | sha256 |
+|---|---|
+| `kntrl-license-core/src/cose/mod.rs` | `8abf884d28ee63c28ff5f85aba99e74cc662c52462741d180d9ca20a2e0a7a28` |
+
+Control-flow source of `read_sign1_envelope` is `verify` lines 221–234
+(quoted; read-only, not copied as a tree):
+
+```
+pub fn verify<'a>(bytes: &'a [u8], expected_pubkey: &[u8; 32]) -> Result<Parsed<'a>, CoseError> {
+    let mut reader = Reader::new(bytes);
+    let count = reader.read_array_header()?;
+    if count != 4 {
+        return Err(CoseError::MalformedEnvelope);
+    }
+    let protected = reader.read_bstr()?;
+    let unprotected_count = reader.read_map_header()?;
+    if unprotected_count != 0 {
+        return Err(CoseError::NonEmptyUnprotectedHeader);
+    }
+    let payload = reader.read_bstr()?;
+    let signature_bytes = reader.read_bstr_fixed::<64>()?;
+    reader.finish()?;
+```
+
+`?` on `CodecError` in this `Result<_, CoseError>` function uses
+`From<CodecError> for CoseError` (`error.rs` `CoseError::Codec(#[from]
+CodecError)`), so truncated slots become `CoseError::Codec(UnexpectedEnd)`
+and `finish` becomes `CoseError::Codec(TrailingBytes)`. Count ≠ 4 and a
+nonempty unprotected map stay the bare `CoseError` variants.
 
 Called from `COSE_Sign1` verify as the array-of-4 envelope skeleton, **before**
 `decode_protected_header` and `build_sig_structure`. Kid / Typ / protected-map
@@ -180,7 +217,10 @@ Public hostile-bytes wrappers (Binder `parse_one` shape):
 
 - `read_array_header(buf: &[u8]) -> Result<u64, CodecError>`
 - `read_map_header(buf: &[u8]) -> Result<u64, CodecError>`
-- `read_sign1_envelope(buf: &[u8]) -> Result<Envelope, CodecError>`
+- `read_sign1_envelope(buf: &[u8]) -> Result<Envelope, CoseError>`
+
+`read_array_header` / `read_map_header` / `read_bstr` stay on `CodecError`.
+Only the envelope wrapper returns `CoseError`, matching source `verify`.
 
 `Envelope` holds `protected: &[u8]`, `payload: &[u8]`, `signature: [u8; 64]`.
 It is not a source type: source `verify` keeps those as locals and then
@@ -200,29 +240,32 @@ layer-1 `checked_add` + `slice::get`.
 | Source | Crate (`rust/src/lib.rs`) | Notes |
 |---|---|---|
 | `error.rs` 61–62 `TrailingBytes` | `CodecError::TrailingBytes` | variant kept; required by `finish` |
-| `error.rs` 84–85 `CoseError::MalformedEnvelope` | `CodecError::MalformedEnvelope` | EXTRACT: `CoseError` not pulled; same reject |
-| `error.rs` 90–91 `CoseError::NonEmptyUnprotectedHeader` | `CodecError::NonEmptyUnprotectedHeader` | EXTRACT: `CoseError` not pulled; same reject |
+| `error.rs` 78–91 `CoseError` | `CoseError::{Codec, MalformedEnvelope, NonEmptyUnprotectedHeader}` | only variants this path produces |
+| `error.rs` 81 `#[from] CodecError` | `impl From<CodecError> for CoseError` | same wrap; thiserror dropped |
 | `mod.rs` 51 `MAJOR_ARRAY` | `MAJOR_ARRAY` | body identical (`0x80`) |
 | `mod.rs` 53 `MAJOR_MAP` | `MAJOR_MAP` | body identical (`0xA0`) |
 | `reader.rs` 30–32 `is_empty` | `Reader::is_empty` | body identical (`pos == buf.len()`) |
 | `reader.rs` 44–46 `finish` | `Reader::finish` | same `TrailingBytes`; braces only |
 | `reader.rs` 172–174 `read_array_header` | `Reader::read_array_header` | body identical (`read_head(MAJOR_ARRAY)`) |
 | `reader.rs` 181–183 `read_map_header` | `Reader::read_map_header` | body identical (`read_head(MAJOR_MAP)`) |
-| `cose/mod.rs` 222–234 | `read_sign1_envelope` | array4 + two bstrs + empty map + sig64 + finish |
+| `cose/mod.rs` 221–234 | `read_sign1_envelope` | array4 + two bstrs + empty map + sig64 + finish; returns `CoseError` |
 
 ## Intentional diffs (`// EXTRACT:`)
 
 | Crate | Why |
 |---|---|
-| `CodecError::{MalformedEnvelope, NonEmptyUnprotectedHeader}` | source lives on `CoseError`; pulling `CoseError` is deferred. Same reject, different type |
+| `CoseError` without `MalformedProtectedHeader` / alg / typ / dalek variants | path cannot produce them |
+| `From<CodecError>` written by hand | source is thiserror `#[from]`; Charon must not pull a proc-macro dep |
 | Public free `read_array_header` / `read_map_header` / `read_sign1_envelope` | theorem entry points; methods stay on `Reader` |
 | `Envelope` struct | source uses locals; theorem needs a named `Ok` payload |
 | No `decode_protected_header` / `build_sig_structure` / dalek | later layers |
 
 Source `verify` turns `finish`’s `CodecError::TrailingBytes` into
-`CoseError::Codec(TrailingBytes)` via `From`. This crate returns
-`CodecError::TrailingBytes` directly. Truncated bstr slots stay
-`UnexpectedEnd` (not `WrongLength` on a short signature body).
+`CoseError::Codec(TrailingBytes)` via `From`. This crate does the same:
+`read_sign1_envelope` returns `Result<Envelope, CoseError>`, so `?` wraps.
+Truncated bstr slots stay inner `CodecError::UnexpectedEnd` (not
+`WrongLength` on a short signature body), surfaced as
+`CoseError::Codec(UnexpectedEnd)`.
 
 ## Remodel (`// REMODEL:`)
 
@@ -235,4 +278,6 @@ for the same unused slice-`fmt` reason as `Reader`.
 `read_bstr_fixed::<16>` (kid), `next_map_key`, `decode_protected_header`,
 `Typ::from_u64`, `slice_validated_array`, `verify`, `parse_sign1`,
 `Sig_structure`, unions, `MaybeUninit`, raw pointer casts, ed25519, KNTRL
-`Typ` meaning, payload decode, encoder.
+`Typ` meaning, payload decode, encoder. Unused `CoseError` variants
+(`MalformedProtectedHeader`, `UnsupportedAlgorithm`, `UnknownTyp`,
+`SignatureInvalid`, `InvalidPublicKey`, `InvalidSigningKey`).
