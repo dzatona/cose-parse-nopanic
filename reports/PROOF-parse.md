@@ -237,13 +237,14 @@ Rust crate, Charon dest, and Lean namespace are `cose_parse_nopanic`
 
 ```
 $ shasum -a 256 rust/src/lib.rs rust/Cargo.toml rust/Cargo.lock
-afc9537577a305c668f343fc94cc6f90fb655019c827c8521e129da1795cbbb4  rust/src/lib.rs
+afe2ce13f3a2d0f716bd895d862d62ff757208907bbecce6ff3905349c6e6b8a  rust/src/lib.rs
 4ef3cb5678a432e5952565e3021790a57afe5d1268db2a38c74cc8a875298820  rust/Cargo.toml
 79f97181da7f9202f56379d974d1c3e4b6946a627d3e75ba691c6e056105e28b  rust/Cargo.lock
 ```
 
-`lib.rs` hash matches the 0.11.0 run. Cargo files changed for the
-crate rename and version.
+`lib.rs` after a comment-only edit (dropped internal spec section
+refs). Cargo files unchanged from the rename run. LLBC/Lean output
+hashes below are from that Charon/Aeneas pass, not re-extracted.
 
 ### `cargo test` (`rust/`)
 
