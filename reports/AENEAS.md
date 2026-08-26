@@ -1,5 +1,8 @@
 # AENEAS — layer 5 remodel
 
+Verbatim Aeneas output from when the crate was still named
+`cbor_nopanic`. The crate is now `cose_parse_nopanic`.
+
 Binder trap: record the Aeneas refusal verbatim, then change Rust only with
 `// EXTRACT:` / `// REMODEL:`.
 

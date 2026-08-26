@@ -1,5 +1,8 @@
 # PROOF — `read_uint_no_panic` (step 1)
 
+Historical layer-1 transcript. The crate was later renamed
+`cbor_nopanic` → `cose_parse_nopanic`; commands below are verbatim.
+
 ## Claim
 
 For every hostile byte slice, the extracted canonical-CBOR unsigned-integer

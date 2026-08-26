@@ -1,4 +1,5 @@
 .local/
+/lean/lake-manifest.json
 /target
 /rust/target
 **/.lake
