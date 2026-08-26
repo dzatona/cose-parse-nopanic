@@ -2,12 +2,14 @@
 //! no-panic claims.
 //!
 //! [`take`], [`Reader::read_head`], [`Reader::read_uint`], [`Reader::read_bstr`],
-//! [`Reader::read_bstr_fixed_64`], [`Reader::read_array_header`],
-//! [`Reader::read_map_header`], and [`Reader::finish`] are copied from
-//! `kntrl-license-core` `cbor/reader.rs`. [`read_sign1_envelope`] composes the
-//! `COSE_Sign1` array-of-4 prefix of `verify` and stops before protected-header
-//! decode. Every line that is not a verbatim copy of that path is marked
-//! `// EXTRACT:` or `// REMODEL:`.
+//! [`Reader::read_bstr_fixed_64`], [`Reader::read_bstr_fixed_16`],
+//! [`Reader::read_array_header`], [`Reader::read_map_header`],
+//! [`Reader::read_fixed_byte`], [`Reader::next_map_key`], and [`Reader::finish`]
+//! are copied from `kntrl-license-core` `cbor/reader.rs`. [`read_sign1_envelope`]
+//! composes the `COSE_Sign1` array-of-4 prefix of `verify`.
+//! [`decode_protected_header`] is the unrolled `{1,4,100}` map (three
+//! [`Reader::next_map_key`] calls, not a walker). Every line that is not a
+//! verbatim copy of that path is marked `// EXTRACT:` or `// REMODEL:`.
 
 // EXTRACT: standalone crate is `no_std` and allocator-free; the source crate
 // is also `no_std` by default, but this file does not pull the rest of it.
@@ -40,15 +42,20 @@ pub enum CodecError {
     WrongLength,
     /// Extra bytes remain after a complete self-delimiting item.
     TrailingBytes,
+    /// Map keys were not strictly ascending (covers a duplicate key too).
+    NonCanonicalKeyOrder,
+    /// An integer that should select a fixed enum discriminant is out of range.
+    InvalidEnumValue,
 }
 
 /// A `COSE_Sign1` envelope that is structurally malformed.
 ///
 /// EXTRACT: copied from `kntrl-license-core` `error.rs` `CoseError`, keeping
-/// only the variants this envelope path can produce (`Codec`,
-/// `MalformedEnvelope`, `NonEmptyUnprotectedHeader`). `thiserror` is dropped
-/// so Charon sees a plain `Copy` enum. Codec errors wrap as
-/// [`CoseError::Codec`] via [`From`] (source: `#[from] CodecError`).
+/// only the variants the envelope and protected-header paths can produce
+/// (`Codec`, `MalformedEnvelope`, `NonEmptyUnprotectedHeader`,
+/// `MalformedProtectedHeader`, `UnsupportedAlgorithm`, `UnknownTyp`).
+/// `thiserror` is dropped so Charon sees a plain `Copy` enum. Codec errors
+/// wrap as [`CoseError::Codec`] via [`From`] (source: `#[from] CodecError`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CoseError {
     /// A lower-level canonical-CBOR codec error.
@@ -57,6 +64,12 @@ pub enum CoseError {
     MalformedEnvelope,
     /// The unprotected header is not the empty map.
     NonEmptyUnprotectedHeader,
+    /// The protected header is not exactly `{1: alg, 4: kid, 100: typ}`.
+    MalformedProtectedHeader,
+    /// The protected header's `alg` is not `-8` (`EdDSA`).
+    UnsupportedAlgorithm,
+    /// The protected header's `typ` is not one of the four defined discriminants.
+    UnknownTyp,
 }
 
 // EXTRACT: source is `#[from] CodecError` on `CoseError::Codec` (thiserror).
@@ -70,6 +83,8 @@ impl From<CodecError> for CoseError {
 
 /// Major type 0 (unsigned integer), pre-shifted into the top-3-bits position.
 const MAJOR_UNSIGNED: u8 = 0x00;
+/// Major type 1 (negative integer), pre-shifted into the top-3-bits position.
+const MAJOR_NEGATIVE: u8 = 0x20;
 /// Major type 2 (byte string), pre-shifted into the top-3-bits position.
 const MAJOR_BSTR: u8 = 0x40;
 /// Major type 4 (array), pre-shifted into the top-3-bits position.
@@ -80,6 +95,41 @@ const MAJOR_MAP: u8 = 0xA0;
 const MAJOR_MASK: u8 = 0xE0;
 /// Mask selecting the additional-info bits of a CBOR head byte.
 const ADDITIONAL_MASK: u8 = 0x1F;
+/// COSE `alg = -8` (`EdDSA`): major type 1 with argument 7 (`-(1 + 7)`).
+const ALG_EDDSA_BYTE: u8 = MAJOR_NEGATIVE | 0x07;
+
+/// The COSE protected-header `typ` discriminant.
+///
+/// EXTRACT: copied from `kntrl-license-core` `types.rs`, keeping only this
+/// enum and [`Typ::from_u64`]. Product meaning of each variant is outside
+/// the no-panic claim. `Hash` is dropped (unused on this path).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Typ {
+    /// `typ = 1`.
+    License,
+    /// `typ = 2`.
+    Enroll,
+    /// `typ = 3`.
+    Revoke,
+    /// `typ = 4`.
+    TrustUpdate,
+}
+
+impl Typ {
+    /// Parses the canonical `uint` discriminant back into a [`Typ`].
+    ///
+    /// # Errors
+    /// Returns [`CodecError::InvalidEnumValue`] if `value` is not `1..=4`.
+    pub const fn from_u64(value: u64) -> Result<Self, CodecError> {
+        match value {
+            1 => Ok(Self::License),
+            2 => Ok(Self::Enroll),
+            3 => Ok(Self::Revoke),
+            4 => Ok(Self::TrustUpdate),
+            _ => Err(CodecError::InvalidEnumValue),
+        }
+    }
+}
 
 /// A cursor over a borrowed canonical-CBOR byte slice.
 ///
@@ -132,7 +182,7 @@ impl<'a> Reader<'a> {
             Some(out) => {
                 self.pos = end;
                 Ok(out)
-            },
+            }
             None => Err(CodecError::UnexpectedEnd),
         }
     }
@@ -162,7 +212,7 @@ impl<'a> Reader<'a> {
                     return Err(CodecError::NonCanonicalLength);
                 }
                 Ok(u64::from(byte))
-            },
+            }
             25 => {
                 let bytes = self.take(2)?;
                 let value = u64::from(u16::from_be_bytes([get_u8(bytes, 0)?, get_u8(bytes, 1)?]));
@@ -172,7 +222,7 @@ impl<'a> Reader<'a> {
                     return Err(CodecError::NonCanonicalLength);
                 }
                 Ok(value)
-            },
+            }
             26 => {
                 let bytes = self.take(4)?;
                 let value = u64::from(u32::from_be_bytes([
@@ -186,7 +236,7 @@ impl<'a> Reader<'a> {
                     return Err(CodecError::NonCanonicalLength);
                 }
                 Ok(value)
-            },
+            }
             27 => {
                 let bytes = self.take(8)?;
                 let value = u64::from_be_bytes([
@@ -204,7 +254,7 @@ impl<'a> Reader<'a> {
                     return Err(CodecError::NonCanonicalLength);
                 }
                 Ok(value)
-            },
+            }
             28..=30 => Err(CodecError::DisallowedMajorType),
             _ => Err(CodecError::IndefiniteLength),
         }
@@ -242,7 +292,7 @@ impl<'a> Reader<'a> {
     /// Reads a canonical CBOR byte string that must be exactly 64 bytes long.
     ///
     /// EXTRACT: source is `read_bstr_fixed::<N>`; this crate monomorphizes N=64
-    /// (COSE_Sign1 signature). Kid N=16 is a later path.
+    /// (COSE_Sign1 signature). Kid N=16 is [`Reader::read_bstr_fixed_16`].
     ///
     /// # Errors
     /// As [`Reader::read_bstr`], plus [`CodecError::WrongLength`] if the decoded
@@ -254,6 +304,26 @@ impl<'a> Reader<'a> {
         // Do not reject `len != 64` before `take` (that would turn a truncated
         // body into WrongLength).
         match <[u8; 64]>::try_from(bytes) {
+            Ok(arr) => Ok(arr),
+            Err(_) => Err(CodecError::WrongLength),
+        }
+    }
+
+    /// Reads a canonical CBOR byte string that must be exactly 16 bytes long.
+    ///
+    /// EXTRACT: source is `read_bstr_fixed::<N>`; this crate monomorphizes N=16
+    /// (protected-header kid).
+    ///
+    /// # Errors
+    /// As [`Reader::read_bstr`], plus [`CodecError::WrongLength`] if the decoded
+    /// length is not exactly 16. The body is taken first, then the length is
+    /// checked — a truncated 16-byte claim stays [`CodecError::UnexpectedEnd`].
+    pub fn read_bstr_fixed_16(&mut self) -> Result<[u8; 16], CodecError> {
+        let bytes = self.read_bstr()?;
+        // REMODEL: `try_from(...).map_err(...)` → match; same WrongLength.
+        // Do not reject `len != 16` before `take` (that would turn a truncated
+        // body into WrongLength).
+        match <[u8; 16]>::try_from(bytes) {
             Ok(arr) => Ok(arr),
             Err(_) => Err(CodecError::WrongLength),
         }
@@ -273,6 +343,42 @@ impl<'a> Reader<'a> {
     /// As [`Reader::read_uint`] (for major type 5 instead of 0).
     pub fn read_map_header(&mut self) -> Result<u64, CodecError> {
         self.read_head(MAJOR_MAP)
+    }
+
+    /// Reads exactly one raw byte and requires it to equal `expected` verbatim.
+    ///
+    /// # Errors
+    /// Returns [`CodecError::TypeMismatch`] if the next byte does not equal
+    /// `expected`, or [`CodecError::UnexpectedEnd`] if the input is truncated.
+    pub fn read_fixed_byte(&mut self, expected: u8) -> Result<(), CodecError> {
+        // REMODEL: source is `take(1)?.first().copied().ok_or(UnexpectedEnd)`.
+        // Same bounds check as layer-1 `get_u8`.
+        let byte = get_u8(self.take(1)?, 0)?;
+        if byte == expected {
+            Ok(())
+        } else {
+            Err(CodecError::TypeMismatch)
+        }
+    }
+
+    /// Reads the next map key as a canonical unsigned integer and requires it
+    /// to be strictly greater than `*last_key`.
+    ///
+    /// # Errors
+    /// As [`Reader::read_uint`], plus [`CodecError::NonCanonicalKeyOrder`] if
+    /// the new key does not strictly exceed `*last_key`.
+    pub fn next_map_key(&mut self, last_key: &mut Option<u64>) -> Result<u64, CodecError> {
+        let key = self.read_uint()?;
+        // REMODEL: source is `if let Some(last) = *last_key && key <= last`.
+        // Nested `if let` is the same strictly-ascending check; avoids a
+        // let-chain that Aeneas does not model.
+        if let Some(last) = *last_key {
+            if key <= last {
+                return Err(CodecError::NonCanonicalKeyOrder);
+            }
+        }
+        *last_key = Some(key);
+        Ok(key)
     }
 }
 
@@ -404,11 +510,64 @@ pub fn read_sign1_envelope(buf: &[u8]) -> Result<Envelope<'_>, CoseError> {
     })
 }
 
+/// Decodes a canonical `{1: alg=-8, 4: kid-16, 100: typ}` protected header.
+///
+/// Three [`Reader::next_map_key`] calls, not a loop over the pair count.
+///
+/// # Errors
+/// Returns [`CoseError::MalformedProtectedHeader`] if the key set/order is not
+/// exactly `{1, 4, 100}`, [`CoseError::UnsupportedAlgorithm`] if `alg` is not
+/// `-8`, [`CoseError::UnknownTyp`] if `typ` is not `1..=4`, or
+/// [`CoseError::Codec`] for other structural violations.
+// EXTRACT: source `decode_protected_header` (cose/mod.rs) is crate-private;
+// public here so the no-panic theorem is a function of hostile bytes.
+// Unroll is source syntax (three `next_map_key`), not a generic map walker.
+pub fn decode_protected_header(bytes: &[u8]) -> Result<([u8; 16], Typ), CoseError> {
+    let mut reader = Reader::new(bytes);
+    let count = reader.read_map_header()?;
+    if count != 3 {
+        return Err(CoseError::MalformedProtectedHeader);
+    }
+    let mut last_key = None;
+
+    let key = reader.next_map_key(&mut last_key)?;
+    if key != 1 {
+        return Err(CoseError::MalformedProtectedHeader);
+    }
+    // REMODEL: source is `read_fixed_byte(...).map_err(|_bad_alg| UnsupportedAlgorithm)`.
+    // Any failure (wrong byte or truncated) stays UnsupportedAlgorithm.
+    match reader.read_fixed_byte(ALG_EDDSA_BYTE) {
+        Ok(()) => {}
+        Err(_) => return Err(CoseError::UnsupportedAlgorithm),
+    }
+
+    let key = reader.next_map_key(&mut last_key)?;
+    if key != 4 {
+        return Err(CoseError::MalformedProtectedHeader);
+    }
+    let kid = reader.read_bstr_fixed_16()?;
+
+    let key = reader.next_map_key(&mut last_key)?;
+    if key != 100 {
+        return Err(CoseError::MalformedProtectedHeader);
+    }
+    let typ_raw = reader.read_uint()?;
+    // REMODEL: source is `Typ::from_u64(...).map_err(|_unknown| UnknownTyp)`.
+    // InvalidEnumValue (and only that, from this match) becomes UnknownTyp.
+    let typ = match Typ::from_u64(typ_raw) {
+        Ok(typ) => typ,
+        Err(_) => return Err(CoseError::UnknownTyp),
+    };
+
+    reader.finish()?;
+    Ok((kid, typ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        read_array_header, read_bstr, read_bstr_fixed_64, read_map_header, read_sign1_envelope,
-        read_uint, CodecError, CoseError, Reader,
+        decode_protected_header, read_array_header, read_bstr, read_bstr_fixed_64, read_map_header,
+        read_sign1_envelope, read_uint, CodecError, CoseError, Reader, Typ,
     };
 
     /// Canonical 4-array: empty protected, empty unprotected map, empty payload,
@@ -427,6 +586,28 @@ mod tests {
     fn expect_envelope_err(buf: &[u8]) -> CoseError {
         match read_sign1_envelope(buf) {
             Ok(_) => panic!("expected envelope error"),
+            Err(e) => e,
+        }
+    }
+
+    /// Canonical `{1: -8, 4: kid-16, 100: typ}` for a given typ discriminant.
+    fn canon_header(typ: u8, kid: [u8; 16]) -> [u8; 24] {
+        let mut bytes = [0_u8; 24];
+        bytes[0] = 0xA3;
+        bytes[1] = 0x01;
+        bytes[2] = 0x27;
+        bytes[3] = 0x04;
+        bytes[4] = 0x50;
+        bytes[5..21].copy_from_slice(&kid);
+        bytes[21] = 0x18;
+        bytes[22] = 100;
+        bytes[23] = typ;
+        bytes
+    }
+
+    fn expect_header_err(buf: &[u8]) -> CoseError {
+        match decode_protected_header(buf) {
+            Ok(_) => panic!("expected protected-header error"),
             Err(e) => e,
         }
     }
@@ -630,7 +811,9 @@ mod tests {
     fn should_decode_canonical_array_header_count_4() {
         assert_eq!(read_array_header(&[0x84]), Ok(4));
         let mut reader = Reader::new(&[0x84]);
-        let count = reader.read_array_header().expect("array-4 head must decode");
+        let count = reader
+            .read_array_header()
+            .expect("array-4 head must decode");
         assert_eq!(count, 4);
     }
 
@@ -663,7 +846,9 @@ mod tests {
     fn should_decode_empty_map_header() {
         assert_eq!(read_map_header(&[0xA0]), Ok(0));
         let mut reader = Reader::new(&[0xA0]);
-        let count = reader.read_map_header().expect("empty map head must decode");
+        let count = reader
+            .read_map_header()
+            .expect("empty map head must decode");
         assert_eq!(count, 0);
     }
 
@@ -736,6 +921,133 @@ mod tests {
         assert_eq!(
             expect_envelope_err(&short_sig),
             CoseError::Codec(CodecError::UnexpectedEnd)
+        );
+    }
+
+    #[test]
+    fn should_decode_canonical_protected_header() {
+        let kid = [
+            0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD,
+            0xEE, 0xFF,
+        ];
+        let cases = [
+            (1_u8, Typ::License),
+            (2, Typ::Enroll),
+            (3, Typ::Revoke),
+            (4, Typ::TrustUpdate),
+        ];
+        for (disc, typ) in cases {
+            let bytes = canon_header(disc, kid);
+            let (got_kid, got_typ) =
+                decode_protected_header(&bytes).expect("canonical header must decode");
+            assert_eq!(got_kid, kid);
+            assert_eq!(got_typ, typ);
+        }
+    }
+
+    #[test]
+    fn should_reject_protected_header_wrong_map_count() {
+        assert_eq!(
+            expect_header_err(&[0xA0]),
+            CoseError::MalformedProtectedHeader
+        );
+        assert_eq!(
+            expect_header_err(&[0xA2]),
+            CoseError::MalformedProtectedHeader
+        );
+        assert_eq!(
+            expect_header_err(&[0xA4]),
+            CoseError::MalformedProtectedHeader
+        );
+    }
+
+    #[test]
+    fn should_reject_protected_header_keys_out_of_order() {
+        // {4: kid-16, 1: -8, 100: 1} — first key is 4, not 1.
+        let mut bytes = [0_u8; 24];
+        bytes[0] = 0xA3;
+        bytes[1] = 0x04;
+        bytes[2] = 0x50;
+        bytes[3..19].fill(0x07);
+        bytes[19] = 0x01;
+        bytes[20] = 0x27;
+        bytes[21] = 0x18;
+        bytes[22] = 100;
+        bytes[23] = 1;
+        assert_eq!(
+            expect_header_err(&bytes),
+            CoseError::MalformedProtectedHeader
+        );
+    }
+
+    #[test]
+    fn should_reject_protected_header_duplicate_key() {
+        // {1: -8, 1: -8, 100: 1} — second key does not strictly increase.
+        let bytes = [0xA3, 0x01, 0x27, 0x01, 0x27, 0x18, 100, 0x01];
+        assert_eq!(
+            expect_header_err(&bytes),
+            CoseError::Codec(CodecError::NonCanonicalKeyOrder)
+        );
+    }
+
+    #[test]
+    fn should_reject_protected_header_unsupported_alg() {
+        let mut bytes = canon_header(1, [0_u8; 16]);
+        bytes[2] = 0x26;
+        assert_eq!(expect_header_err(&bytes), CoseError::UnsupportedAlgorithm);
+        bytes[2] = 0x00;
+        assert_eq!(expect_header_err(&bytes), CoseError::UnsupportedAlgorithm);
+    }
+
+    #[test]
+    fn should_reject_truncated_kid_body() {
+        // Map-3, key 1, alg -8, key 4, bstr claims 16, only 2 body bytes.
+        let bytes = [0xA3, 0x01, 0x27, 0x04, 0x50, 0xAA, 0xBB];
+        assert_eq!(
+            expect_header_err(&bytes),
+            CoseError::Codec(CodecError::UnexpectedEnd)
+        );
+    }
+
+    #[test]
+    fn should_reject_kid_wrong_length() {
+        // Complete 8-byte kid offered where 16 is required.
+        let mut bytes = [0_u8; 17];
+        bytes[0] = 0xA3;
+        bytes[1] = 0x01;
+        bytes[2] = 0x27;
+        bytes[3] = 0x04;
+        bytes[4] = 0x48;
+        bytes[5..13].fill(0x07);
+        bytes[13] = 0x18;
+        bytes[14] = 100;
+        bytes[15] = 1;
+        assert_eq!(
+            expect_header_err(&bytes[..16]),
+            CoseError::Codec(CodecError::WrongLength)
+        );
+    }
+
+    #[test]
+    fn should_reject_unknown_typ() {
+        assert_eq!(
+            expect_header_err(&canon_header(0, [0_u8; 16])),
+            CoseError::UnknownTyp
+        );
+        assert_eq!(
+            expect_header_err(&canon_header(5, [0_u8; 16])),
+            CoseError::UnknownTyp
+        );
+    }
+
+    #[test]
+    fn should_reject_protected_header_trailing_bytes() {
+        let mut bytes = [0_u8; 25];
+        bytes[..24].copy_from_slice(&canon_header(1, [0_u8; 16]));
+        bytes[24] = 0x00;
+        assert_eq!(
+            expect_header_err(&bytes),
+            CoseError::Codec(CodecError::TrailingBytes)
         );
     }
 }
