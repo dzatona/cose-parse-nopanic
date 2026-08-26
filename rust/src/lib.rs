@@ -10,8 +10,9 @@
 //! [`decode_protected_header`] is the unrolled `{1,4,100}` map (three
 //! [`Reader::next_map_key`] calls, not a walker). [`build_sig_structure`]
 //! rebuilds RFC 8152 `Sig_structure` into a `[u8; MAX_MESSAGE_LEN]` buffer.
-//! Every line that is not a verbatim copy of that path is marked `// EXTRACT:`
-//! or `// REMODEL:`.
+//! [`parse_sign1`] is `verify` minus crypto: those three helpers, then
+//! [`Parsed`]. Every line that is not a verbatim copy of that path is marked
+//! `// EXTRACT:` or `// REMODEL:`.
 
 // EXTRACT: standalone crate is `no_std` and allocator-free; the source crate
 // is also `no_std` by default, but this file does not pull the rest of it.
@@ -801,10 +802,53 @@ pub fn build_sig_structure(
     })
 }
 
+/// Authoritative `kid`/`typ` and still-undecoded payload from a `COSE_Sign1`
+/// envelope, before signature verification.
+///
+/// EXTRACT: source `Parsed` in `cose/mod.rs`. `Debug`/`Clone`/`Copy` are
+/// omitted so Aeneas does not emit an unused slice `fmt` axiom. Crypto is
+/// not represented: this is the pre-dalek view of `verify`.
+pub struct Parsed<'a> {
+    /// 16-byte key identifier from protected-header key 4.
+    pub kid: [u8; 16],
+    /// Protected-header `typ` discriminant.
+    pub typ: Typ,
+    /// Raw payload byte string. Not decoded.
+    pub payload: &'a [u8],
+}
+
+/// Parses a `COSE_Sign1` envelope up to `Sig_structure`, without verifying
+/// the signature.
+///
+/// Order matches source `verify` before dalek: array-of-4 envelope, protected
+/// header `{1,4,100}`, then [`build_sig_structure`]. The 64-byte signature
+/// slot is consumed and discarded. The reconstructed `Sig_structure` buffer
+/// is discarded; [`CodecError::BufferTooSmall`] stays [`Err`].
+///
+/// # Errors
+/// As [`read_sign1_envelope`], [`decode_protected_header`], and
+/// [`build_sig_structure`].
+// EXTRACT: verify minus crypto. Source `cose/mod.rs` 221–239 then
+// `Ok(Parsed { kid, typ, payload })` at 248. CUT 241–246 (dalek). No pubkey.
+// Body composes [`read_sign1_envelope`] + [`decode_protected_header`] +
+// [`build_sig_structure`], which is the same byte sequence as inlining
+// `Reader::new` / array4 / protected bstr / empty map / payload bstr /
+// sig64 / `finish`.
+pub fn parse_sign1<'a>(bytes: &'a [u8]) -> Result<Parsed<'a>, CoseError> {
+    let envelope = read_sign1_envelope(bytes)?;
+    let (kid, typ) = decode_protected_header(envelope.protected)?;
+    let _sig_structure = build_sig_structure(typ, envelope.protected, envelope.payload)?;
+    Ok(Parsed {
+        kid,
+        typ,
+        payload: envelope.payload,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        build_sig_structure, decode_protected_header, read_array_header, read_bstr,
+        build_sig_structure, decode_protected_header, parse_sign1, read_array_header, read_bstr,
         read_bstr_fixed_64, read_map_header, read_sign1_envelope, read_uint, CodecError, CoseError,
         Reader, Typ, AAD_ENROLL, AAD_LICENSE, AAD_REVOKE, AAD_TRUST_UPDATE, MAX_MESSAGE_LEN,
     };
@@ -1380,6 +1424,149 @@ mod tests {
         let protected = [0_u8; MAX_MESSAGE_LEN];
         assert_eq!(
             expect_sig_err(Typ::License, &protected, &[]),
+            CoseError::Codec(CodecError::BufferTooSmall)
+        );
+    }
+
+    /// Canonical Sign1: array-4, protected `{1:-8,4:kid,100:typ}`, empty
+    /// unprotected, `payload`, 64-byte zero signature.
+    fn fill_sign1(out: &mut [u8], typ: u8, kid: [u8; 16], payload: &[u8]) -> usize {
+        let header = canon_header(typ, kid);
+        let mut i = 0;
+        out[i] = 0x84;
+        i += 1;
+        out[i] = 0x58;
+        i += 1;
+        out[i] = 24;
+        i += 1;
+        out[i..i + 24].copy_from_slice(&header);
+        i += 24;
+        out[i] = 0xA0;
+        i += 1;
+        let plen = payload.len();
+        if plen < 24 {
+            out[i] = 0x40 | u8::try_from(plen).unwrap_or(0);
+            i += 1;
+        } else if plen <= 255 {
+            out[i] = 0x58;
+            i += 1;
+            out[i] = u8::try_from(plen).unwrap_or(0);
+            i += 1;
+        } else {
+            out[i] = 0x59;
+            i += 1;
+            out[i] = u8::try_from(plen >> 8).unwrap_or(0);
+            i += 1;
+            out[i] = u8::try_from(plen & 0xFF).unwrap_or(0);
+            i += 1;
+        }
+        out[i..i + plen].copy_from_slice(payload);
+        i += plen;
+        out[i] = 0x58;
+        i += 1;
+        out[i] = 64;
+        i += 1;
+        i += 64;
+        i
+    }
+
+    fn expect_parse_err(buf: &[u8]) -> CoseError {
+        match parse_sign1(buf) {
+            Ok(_) => panic!("expected parse_sign1 error"),
+            Err(e) => e,
+        }
+    }
+
+    #[test]
+    fn should_parse_canonical_sign1() {
+        let kid = [
+            0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD,
+            0xEE, 0xFF,
+        ];
+        let payload = [0xAB_u8];
+        let mut bytes = [0_u8; 128];
+        let n = fill_sign1(&mut bytes, 1, kid, &payload);
+        let parsed = parse_sign1(&bytes[..n]).expect("canonical sign1 must parse");
+        assert_eq!(parsed.kid, kid);
+        assert_eq!(parsed.typ, Typ::License);
+        assert_eq!(parsed.payload, payload.as_slice());
+    }
+
+    #[test]
+    fn should_reject_parse_malformed_envelope() {
+        assert_eq!(expect_parse_err(&[0x80]), CoseError::MalformedEnvelope);
+        assert_eq!(
+            expect_parse_err(&[0x83, 0x40, 0xA0, 0x40]),
+            CoseError::MalformedEnvelope
+        );
+    }
+
+    #[test]
+    fn should_reject_parse_nonempty_unprotected() {
+        let mut bytes = [0_u8; 128];
+        let n = fill_sign1(&mut bytes, 1, [0_u8; 16], &[]);
+        bytes[27] = 0xA1;
+        assert_eq!(
+            expect_parse_err(&bytes[..n]),
+            CoseError::NonEmptyUnprotectedHeader
+        );
+    }
+
+    #[test]
+    fn should_reject_parse_bad_protected_header() {
+        let mut bytes = [0_u8; 128];
+        let n = fill_sign1(&mut bytes, 5, [0_u8; 16], &[]);
+        assert_eq!(expect_parse_err(&bytes[..n]), CoseError::UnknownTyp);
+        let n = fill_sign1(&mut bytes, 1, [0_u8; 16], &[]);
+        bytes[5] = 0x26;
+        assert_eq!(
+            expect_parse_err(&bytes[..n]),
+            CoseError::UnsupportedAlgorithm
+        );
+        let empty_map_protected = [0x84, 0x41, 0xA0, 0xA0, 0x40, 0x58, 64];
+        let mut with_sig = [0_u8; 71];
+        with_sig[..7].copy_from_slice(&empty_map_protected);
+        assert_eq!(
+            expect_parse_err(&with_sig),
+            CoseError::MalformedProtectedHeader
+        );
+    }
+
+    #[test]
+    fn should_reject_parse_truncated_and_trailing() {
+        assert_eq!(
+            expect_parse_err(&[0x84]),
+            CoseError::Codec(CodecError::UnexpectedEnd)
+        );
+        let mut bytes = [0_u8; 128];
+        let n = fill_sign1(&mut bytes, 1, [0_u8; 16], &[0xAB]);
+        assert_eq!(
+            expect_parse_err(&bytes[..n - 10]),
+            CoseError::Codec(CodecError::UnexpectedEnd)
+        );
+        bytes[n] = 0x00;
+        assert_eq!(
+            expect_parse_err(&bytes[..=n]),
+            CoseError::Codec(CodecError::TrailingBytes)
+        );
+    }
+
+    #[test]
+    fn should_reject_parse_oversized_sig_structure() {
+        // 4096-byte payload fits the envelope bstr but not Sig_structure.
+        let mut bytes = [0_u8; 4193];
+        bytes[0] = 0x84;
+        bytes[1] = 0x58;
+        bytes[2] = 24;
+        bytes[3..27].copy_from_slice(&canon_header(1, [0_u8; 16]));
+        bytes[27] = 0xA0;
+        bytes[28] = 0x59;
+        bytes[29] = 0x10;
+        bytes[30] = 0x00;
+        bytes[4127] = 0x58;
+        bytes[4128] = 64;
+        assert_eq!(
+            expect_parse_err(&bytes),
             CoseError::Codec(CodecError::BufferTooSmall)
         );
     }

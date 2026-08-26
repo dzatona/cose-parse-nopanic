@@ -1,11 +1,11 @@
 [package]
 name = "cbor_nopanic"
-version = "0.10.0"
+version = "0.11.0"
 authors = ["Dmitrii Zatona <dmitrii@zatona.dev>"]
 edition = "2021"
 rust-version = "1.92"
 license = "LicenseRef-Proprietary"
-description = "Extracted loop-free canonical-CBOR Sign1 envelope, protected-header, and Sig_structure encoder for a no-panic proof"
+description = "Extracted loop-free canonical-CBOR COSE_Sign1 envelope parse (verify minus crypto) for a no-panic proof"
 publish = false
 
 [lib]
