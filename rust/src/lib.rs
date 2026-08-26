@@ -1,9 +1,10 @@
-//! Loop-free canonical-CBOR unsigned-integer decoder, extracted for a
-//! machine-checked no-panic claim.
+//! Loop-free canonical-CBOR decoder paths extracted for machine-checked
+//! no-panic claims.
 //!
-//! [`take`], [`Reader::read_head`], and [`Reader::read_uint`] are copied from
-//! `kntrl-license-core` `cbor/reader.rs`. Every line that is not a verbatim copy
-//! of that path is marked `// EXTRACT:` or `// REMODEL:`.
+//! [`take`], [`Reader::read_head`], [`Reader::read_uint`], [`Reader::read_bstr`],
+//! and [`Reader::read_bstr_fixed_64`] are copied from `kntrl-license-core`
+//! `cbor/reader.rs`. Every line that is not a verbatim copy of that path is
+//! marked `// EXTRACT:` or `// REMODEL:`.
 
 // EXTRACT: standalone crate is `no_std` and allocator-free; the source crate
 // is also `no_std` by default, but this file does not pull the rest of it.
@@ -30,10 +31,16 @@ pub enum CodecError {
     IndefiniteLength,
     /// Additional-info values 28..=30 (reserved) appeared in a head byte.
     DisallowedMajorType,
+    /// A length or count could not be represented in this platform's `usize`.
+    LengthOverflow,
+    /// A fixed-length byte string had the wrong length.
+    WrongLength,
 }
 
 /// Major type 0 (unsigned integer), pre-shifted into the top-3-bits position.
 const MAJOR_UNSIGNED: u8 = 0x00;
+/// Major type 2 (byte string), pre-shifted into the top-3-bits position.
+const MAJOR_BSTR: u8 = 0x40;
 /// Mask selecting the major-type bits of a CBOR head byte.
 const MAJOR_MASK: u8 = 0xE0;
 /// Mask selecting the additional-info bits of a CBOR head byte.
@@ -159,6 +166,45 @@ impl<'a> Reader<'a> {
     pub fn read_uint(&mut self) -> Result<u64, CodecError> {
         self.read_head(MAJOR_UNSIGNED)
     }
+
+    /// Reads a canonical CBOR definite-length byte string (major type 2), zero-copy.
+    ///
+    /// # Errors
+    /// Returns [`CodecError::TypeMismatch`] if the next item is not major type 2,
+    /// [`CodecError::NonCanonicalLength`] if its length is not smallest-form,
+    /// [`CodecError::LengthOverflow`] if the length does not fit `usize`, or
+    /// [`CodecError::UnexpectedEnd`] if the input is truncated.
+    pub fn read_bstr(&mut self) -> Result<&'a [u8], CodecError> {
+        let len = self.read_head(MAJOR_BSTR)?;
+        // REMODEL: `usize::try_from(len).map_err(...)` is an Aeneas-unknown
+        // `TryFrom<u64>` / `map_err` pair; the overflow check is the same.
+        if len > usize::MAX as u64 {
+            return Err(CodecError::LengthOverflow);
+        }
+        #[allow(clippy::cast_possible_truncation)] // bounded by the check above
+        let len = len as usize;
+        self.take(len)
+    }
+
+    /// Reads a canonical CBOR byte string that must be exactly 64 bytes long.
+    ///
+    /// EXTRACT: source is `read_bstr_fixed::<N>`; this crate monomorphizes N=64
+    /// (COSE_Sign1 signature). Kid N=16 is a later path.
+    ///
+    /// # Errors
+    /// As [`Reader::read_bstr`], plus [`CodecError::WrongLength`] if the decoded
+    /// length is not exactly 64. The body is taken first, then the length is
+    /// checked — a truncated 64-byte claim stays [`CodecError::UnexpectedEnd`].
+    pub fn read_bstr_fixed_64(&mut self) -> Result<[u8; 64], CodecError> {
+        let bytes = self.read_bstr()?;
+        // REMODEL: `try_from(...).map_err(...)` → match; same WrongLength.
+        // Do not reject `len != 64` before `take` (that would turn a truncated
+        // body into WrongLength).
+        match <[u8; 64]>::try_from(bytes) {
+            Ok(arr) => Ok(arr),
+            Err(_) => Err(CodecError::WrongLength),
+        }
+    }
 }
 
 /// Index `bytes[i]` as `Result`, never a panic.
@@ -186,9 +232,33 @@ pub fn read_uint(buf: &[u8]) -> Result<u64, CodecError> {
     reader.read_uint()
 }
 
+/// Reads a canonical CBOR definite-length byte string from the start of `buf`.
+///
+/// # Errors
+/// As [`Reader::read_bstr`].
+// EXTRACT: public `&[u8]` entry point so the no-panic theorem is a function of
+// hostile bytes (Binder `parse_one` shape). Body is `Reader::new` + method.
+pub fn read_bstr(buf: &[u8]) -> Result<&[u8], CodecError> {
+    // EXTRACT: wrapper; source exposes only the method on `Reader`.
+    let mut reader = Reader::new(buf);
+    reader.read_bstr()
+}
+
+/// Reads a canonical CBOR byte string that must be exactly 64 bytes long.
+///
+/// # Errors
+/// As [`Reader::read_bstr_fixed_64`].
+// EXTRACT: public `&[u8]` entry point so the no-panic theorem is a function of
+// hostile bytes (Binder `parse_one` shape). Body is `Reader::new` + method.
+pub fn read_bstr_fixed_64(buf: &[u8]) -> Result<[u8; 64], CodecError> {
+    // EXTRACT: wrapper; source exposes only the method on `Reader`.
+    let mut reader = Reader::new(buf);
+    reader.read_bstr_fixed_64()
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{read_uint, CodecError, Reader};
+    use super::{read_bstr, read_bstr_fixed_64, read_uint, CodecError, Reader};
 
     /// Canonical encodings of the smallest-form uint boundaries from the source
     /// `should_round_trip_uint_smallest_form_boundaries` test, written by hand
@@ -211,10 +281,17 @@ mod tests {
             ),
         ];
         for (bytes, value) in cases {
-            assert_eq!(read_uint(bytes), Ok(*value), "free wrapper must decode {value}");
+            assert_eq!(
+                read_uint(bytes),
+                Ok(*value),
+                "free wrapper must decode {value}"
+            );
             let mut reader = Reader::new(bytes);
             let decoded = reader.read_uint().expect("encoded bytes must decode");
-            assert_eq!(decoded, *value, "Reader method must preserve the exact value");
+            assert_eq!(
+                decoded, *value,
+                "Reader method must preserve the exact value"
+            );
         }
     }
 
@@ -256,7 +333,10 @@ mod tests {
     fn should_reject_truncated_extra_length() {
         assert_eq!(read_uint(&[0x18]), Err(CodecError::UnexpectedEnd));
         assert_eq!(read_uint(&[0x19, 0x00]), Err(CodecError::UnexpectedEnd));
-        assert_eq!(read_uint(&[0x1A, 0x00, 0x00, 0x00]), Err(CodecError::UnexpectedEnd));
+        assert_eq!(
+            read_uint(&[0x1A, 0x00, 0x00, 0x00]),
+            Err(CodecError::UnexpectedEnd)
+        );
         assert_eq!(
             read_uint(&[0x1B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]),
             Err(CodecError::UnexpectedEnd)
@@ -269,5 +349,109 @@ mod tests {
         assert_eq!(read_uint(&[0x1D]), Err(CodecError::DisallowedMajorType));
         assert_eq!(read_uint(&[0x1E]), Err(CodecError::DisallowedMajorType));
         assert_eq!(read_uint(&[0x1F]), Err(CodecError::IndefiniteLength));
+    }
+
+    /// Canonical definite-length bstrs, including empty and the 1-byte length
+    /// threshold (24). Vectors match RFC 8949 §3.1 major type 2.
+    #[test]
+    fn should_decode_canonical_bstr() {
+        assert_eq!(read_bstr(&[0x40]), Ok([].as_slice()));
+        assert_eq!(read_bstr(&[0x41, 0xAB]), Ok([0xAB].as_slice()));
+        assert_eq!(
+            read_bstr(&[0x43, 0x01, 0x02, 0x03]),
+            Ok([0x01, 0x02, 0x03].as_slice())
+        );
+        let mut twenty_four = [0_u8; 26];
+        twenty_four[0] = 0x58;
+        twenty_four[1] = 0x18;
+        twenty_four[2..].fill(0xAA);
+        assert_eq!(read_bstr(&twenty_four), Ok([0xAA; 24].as_slice()));
+        let mut reader = Reader::new(&[0x41, 0xAB]);
+        let decoded = reader.read_bstr().expect("encoded bytes must decode");
+        assert_eq!(decoded, [0xAB]);
+    }
+
+    #[test]
+    fn should_reject_non_canonical_bstr_length() {
+        // 1-byte length form of 5 (must be additional-info 5).
+        assert_eq!(
+            read_bstr(&[0x58, 0x05, 0x01, 0x02, 0x03, 0x04, 0x05]),
+            Err(CodecError::NonCanonicalLength)
+        );
+    }
+
+    #[test]
+    fn should_reject_empty_bstr_input() {
+        assert_eq!(read_bstr(&[]), Err(CodecError::UnexpectedEnd));
+    }
+
+    #[test]
+    fn should_reject_major_type_not_bstr() {
+        assert_eq!(read_bstr(&[0x00]), Err(CodecError::TypeMismatch));
+        assert_eq!(read_bstr(&[0x60]), Err(CodecError::TypeMismatch));
+    }
+
+    #[test]
+    fn should_reject_truncated_bstr_header() {
+        assert_eq!(read_bstr(&[0x58]), Err(CodecError::UnexpectedEnd));
+        assert_eq!(read_bstr(&[0x59, 0x00]), Err(CodecError::UnexpectedEnd));
+    }
+
+    #[test]
+    fn should_reject_truncated_bstr_body() {
+        // Claims 3 bytes, only 2 follow. Must stay UnexpectedEnd, not WrongLength.
+        assert_eq!(
+            read_bstr(&[0x43, 0x01, 0x02]),
+            Err(CodecError::UnexpectedEnd)
+        );
+        assert_eq!(
+            read_bstr(&[0x58, 0x18, 0x00]),
+            Err(CodecError::UnexpectedEnd)
+        );
+    }
+
+    #[test]
+    fn should_decode_fixed_64_bstr() {
+        let mut bytes = [0_u8; 66];
+        bytes[0] = 0x58;
+        bytes[1] = 64;
+        for (i, slot) in bytes[2..].iter_mut().enumerate() {
+            *slot = u8::try_from(i).unwrap_or(0);
+        }
+        let got = read_bstr_fixed_64(&bytes).expect("64-byte bstr must decode");
+        assert_eq!(got[0], 0);
+        assert_eq!(got[63], 63);
+        let mut reader = Reader::new(&bytes);
+        let via_method = reader.read_bstr_fixed_64().expect("method must decode");
+        assert_eq!(via_method, got);
+    }
+
+    #[test]
+    fn should_reject_fixed_64_wrong_length_after_full_body() {
+        // Complete 8-byte bstr offered to the 64-byte reader.
+        assert_eq!(
+            read_bstr_fixed_64(&[0x48, 1, 2, 3, 4, 5, 6, 7, 8]),
+            Err(CodecError::WrongLength)
+        );
+        // Complete 65-byte bstr (1-byte length form).
+        let mut too_long = [0_u8; 67];
+        too_long[0] = 0x58;
+        too_long[1] = 65;
+        assert_eq!(read_bstr_fixed_64(&too_long), Err(CodecError::WrongLength));
+    }
+
+    #[test]
+    fn should_reject_truncated_fixed_64_body() {
+        // Header claims 64, body is short. Must stay UnexpectedEnd, not WrongLength.
+        let mut bytes = [0_u8; 12];
+        bytes[0] = 0x58;
+        bytes[1] = 64;
+        assert_eq!(read_bstr_fixed_64(&bytes), Err(CodecError::UnexpectedEnd));
+    }
+
+    #[test]
+    fn should_reject_reserved_and_indefinite_bstr() {
+        assert_eq!(read_bstr(&[0x5C]), Err(CodecError::DisallowedMajorType));
+        assert_eq!(read_bstr(&[0x5F]), Err(CodecError::IndefiniteLength));
     }
 }
