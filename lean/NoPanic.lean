@@ -1,6 +1,5 @@
--- No-panic theorem for the extracted canonical-CBOR unsigned-integer decoder,
--- translated by Aeneas from
---   llbc/cbor_nopanic.llbc
+-- Handwritten no-panic theorem. Aeneas generates `CborNopanic.lean` from
+-- `llbc/cbor_nopanic.llbc`; this file is not Aeneas output.
 --
 -- Panic model (Binder spike / panic model): Aeneas puts every function in the `Result`
 -- monad `ok v | fail e | div`. A panic (overflow, OOB index, unwrap, ...) is
