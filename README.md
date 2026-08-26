@@ -13,12 +13,16 @@ Layer 2 is also proved: `read_bstr` and `read_bstr_fixed_64` return `ok _`
 (a slice / 64-byte array or a normal `CodecError`) for every `&[u8]`.
 Layer 3 is also proved: `read_sign1_envelope` returns `ok _` (the array-of-4
 slots or a normal `CoseError`) for every `&[u8]`.
+Layer 4 is also proved: `decode_protected_header` returns `ok _` (kid +
+`Typ`, or a normal `CoseError`) for every `&[u8]`. The `{1,4,100}` map is
+three `next_map_key` calls, not a walker.
 **Goal:** no-panic of the COSE_Sign1 envelope parse (array4 + bstrs + protected
 map + `Sig_structure` into `[u8; 4096]`). Signature / Ed25519 is not proved.
 
 Reports: [`reports/PROOF.md`](reports/PROOF.md),
 [`reports/PROOF-bstr.md`](reports/PROOF-bstr.md),
 [`reports/PROOF-envelope.md`](reports/PROOF-envelope.md),
+[`reports/PROOF-header.md`](reports/PROOF-header.md),
 [`reports/EXTRACT.md`](reports/EXTRACT.md),
 [`reports/TOOLCHAIN.md`](reports/TOOLCHAIN.md).
 
