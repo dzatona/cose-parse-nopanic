@@ -17,8 +17,8 @@ unprotected map, protected header `{1: -8, 4: kid, 100: typ}`, then
 **Not proved:** signature verification, `verify_strict`, public keys,
 payload decode, trust-set.
 
-The Rust crate and Lean namespace are still `cbor_nopanic` (layer-1
-extraction name). Reports below are the proof artifacts.
+Rust crate and Lean namespace: `cose_parse_nopanic`. Reports below are
+the proof artifacts.
 
 Reports: [`reports/PROOF-parse.md`](reports/PROOF-parse.md)
 (finale), [`reports/EXTRACT.md`](reports/EXTRACT.md),
@@ -32,14 +32,15 @@ Reports: [`reports/PROOF-parse.md`](reports/PROOF-parse.md)
 ## Reproduce
 
 Pin Charon `909ff09a` / Aeneas `c2015b86` / Lean 4.31.0 — install
-notes in [`reports/TOOLCHAIN.md`](reports/TOOLCHAIN.md). Then point
-`lean/lakefile.lean` at your Aeneas `backends/lean` checkout and:
+notes in [`reports/TOOLCHAIN.md`](reports/TOOLCHAIN.md).
+`lean/lakefile.lean` loads Aeneas from `$HOME/aeneas/backends/lean`
+(`AENEAS_LEAN` overrides). Then:
 
 ```sh
 cd rust && cargo test
 export PATH="$HOME/charon/bin:$PATH"
-charon cargo --preset=aeneas --dest-file ../llbc/cbor_nopanic.llbc
+charon cargo --preset=aeneas --dest-file ../llbc/cose_parse_nopanic.llbc
 eval $(opam env --switch=5.3.0)
-aeneas -backend lean -dest ../lean ../llbc/cbor_nopanic.llbc
+aeneas -backend lean -dest ../lean ../llbc/cose_parse_nopanic.llbc
 cd ../lean && lake build
 ```

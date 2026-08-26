@@ -39,5 +39,5 @@ elan toolchain install leanprover/lean4:v4.31.0
 cd ~/aeneas/backends/lean && lake exe cache get && lake build Aeneas
 ```
 
-`lean/lakefile.lean` requires Aeneas from `/Users/dzatona/aeneas/backends/lean`.
-Change that path if the checkout moves.
+`lean/lakefile.lean` loads Aeneas from `$HOME/aeneas/backends/lean`
+(`AENEAS_LEAN` overrides).

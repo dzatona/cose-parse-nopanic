@@ -1,5 +1,5 @@
--- Handwritten no-panic theorem. Aeneas generates `CborNopanic.lean` from
--- `llbc/cbor_nopanic.llbc`; this file is not Aeneas output.
+-- Handwritten no-panic theorem. Aeneas generates `CoseParseNopanic.lean` from
+-- `llbc/cose_parse_nopanic.llbc`; this file is not Aeneas output.
 --
 -- Panic model (Binder spike / panic model): Aeneas puts every function in the `Result`
 -- monad `ok v | fail e | div`. A panic (overflow, OOB index, unwrap, ...) is
@@ -9,10 +9,10 @@
 --
 -- This theorem does not claim RFC 8949 correctness.
 
-import CborNopanic
+import CoseParseNopanic
 
 open Aeneas Aeneas.Std Aeneas.Std.WP Result
-open cbor_nopanic
+open cose_parse_nopanic
 
 set_option linter.unusedSimpArgs false
 

@@ -3,5 +3,5 @@
 version = 4
 
 [[package]]
-name = "cbor_nopanic"
-version = "0.14.0"
+name = "cose_parse_nopanic"
+version = "0.15.0"
