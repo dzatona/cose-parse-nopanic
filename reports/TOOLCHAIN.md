@@ -4,7 +4,7 @@ Recorded 2026-08-26 on aarch64-apple-darwin. Pins match the Binder spike
 README (`runtimeverification/kernel-rust-verification-spike`) except where
 the local stable rustc is newer; that drift is recorded, not silent.
 
-| Component | Pin (pins) | What ran here |
+| Component | Pin | What ran here |
 |---|---|---|
 | Charon | commit `909ff09a`, v0.1.220 (`--preset=aeneas`) | `/Users/dzatona/charon` @ `909ff09ad0f144f83d354f2c3d26f631fb9f8e9a`, crate version `0.1.220` |
 | Charon rustc | nightly-2026-06-01 (Charon's `rust-toolchain`) | same; extra Charon targets trimmed locally to `aarch64-apple-darwin` only (disk), channel unchanged |

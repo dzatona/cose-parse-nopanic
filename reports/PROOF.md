@@ -19,7 +19,7 @@ reserved additional, indefinite). `fail` would be panic / OOB / unwrap.
 
 Theorem: `NoPanic.read_uint_no_panic` in `lean/NoPanic.lean`. No `sorry`.
 
-## Checklist (checklist)
+## Checklist
 
 1. `cargo test` in `rust/` — 6/6 green (canonical 0/23/24/255/…, non-canonical
    `[0x18, 0x05]`, empty → `UnexpectedEnd`, major ≠ 0 → `TypeMismatch`).

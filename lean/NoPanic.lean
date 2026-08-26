@@ -1,7 +1,7 @@
 -- Handwritten no-panic theorem. Aeneas generates `CoseParseNopanic.lean` from
 -- `llbc/cose_parse_nopanic.llbc`; this file is not Aeneas output.
 --
--- Panic model (Binder spike / panic model): Aeneas puts every function in the `Result`
+-- Panic model (Binder spike): Aeneas puts every function in the `Result`
 -- monad `ok v | fail e | div`. A panic (overflow, OOB index, unwrap, ...) is
 -- exactly `fail`. No-panic is `∀ inputs, ∃ v, f inputs = ok v`. A codec
 -- rejection is `ok (Result.Err CodecError)` (or `CoseError` on the envelope

@@ -3,7 +3,7 @@
 Verbatim Aeneas output from when the crate was still named
 `cbor_nopanic`. The crate is now `cose_parse_nopanic`.
 
-Binder trap: record the Aeneas refusal verbatim, then change Rust only with
+Record the Aeneas refusal verbatim, then change Rust only with
 `// EXTRACT:` / `// REMODEL:`.
 
 Pins: Charon `909ff09a` v0.1.220, Aeneas `c2015b86`.
@@ -27,7 +27,7 @@ AENEAS_EXIT:1
 
 Generated Lean also emitted `axiom core.str.Str.as_bytes`.
 
-This is the Binder trap trap (`FnOnce` + `&mut [u8; N]`), plus an unknown-external
+This is the Binder trap (`FnOnce` + `&mut [u8; N]`), plus an unknown-external
 `str::as_bytes`.
 
 ## Attempt 2 — owned array, still `'static` AAD while sink is live
@@ -47,7 +47,7 @@ Span was `external_aad(typ)` (then, after hoisting, the local `aad` slice)
 while `&mut SliceSink` was live. Aeneas refused mixing a `'static` global
 slice with the mutable owned array.
 
-## Close (Binder trap, one remodel)
+## Close (one remodel)
 
 Owned `[u8; MAX_MESSAGE_LEN]` sink, return filled `SigStructure`. Write
 `"Signature1"` and the four AAD tokens as byte literals. Length check

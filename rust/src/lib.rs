@@ -602,7 +602,7 @@ pub fn decode_protected_header(bytes: &[u8]) -> Result<([u8; 16], Typ), CoseErro
 ///
 /// EXTRACT: source `SliceSink` borrows `&mut [u8]` and implements a `Sink`
 /// trait (also for `Vec<u8>` under alloc). Owned array so Aeneas does not see
-/// `FnOnce` + `&mut [u8; N]` (Binder trap). No trait, no Vec.
+/// `FnOnce` + `&mut [u8; N]` (Binder `&mut [u8; N]` trap). No trait, no Vec.
 struct SliceSink {
     buf: [u8; MAX_MESSAGE_LEN],
     len: usize,
@@ -756,7 +756,7 @@ fn write_array_header(sink: &mut SliceSink, len: u64) -> Result<(), CodecError> 
 ///
 /// EXTRACT: source `build_sig_structure` returns a prefix `&[u8]` into a
 /// caller-supplied `&mut [u8]`. This type owns the filled buffer so the
-/// public function does not take `FnOnce` + `&mut [u8; N]` (Binder trap).
+/// public function does not take `FnOnce` + `&mut [u8; N]` (Binder `&mut [u8; N]` trap).
 pub struct SigStructure {
     /// Encoded bytes, zero-padded after [`Self::len`].
     pub buf: [u8; MAX_MESSAGE_LEN],
@@ -771,7 +771,7 @@ pub struct SigStructure {
 /// Returns [`CoseError::Codec`] wrapping [`CodecError::BufferTooSmall`] if the
 /// reconstructed bytes do not fit.
 // EXTRACT: source takes `out: &mut [u8]` and returns `out.get(..written_len)`.
-// Buffer is built locally and returned filled (Binder trap Binder close).
+// Buffer is built locally and returned filled (Binder close).
 pub fn build_sig_structure(
     typ: Typ,
     protected: &[u8],

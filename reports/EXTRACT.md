@@ -21,7 +21,7 @@ Last commit touching the three files:
 | `kntrl-license-core/src/cbor/mod.rs` | `f4dd9ef0245f10d9bafe8afae7f08ac226657fe699861c34f30359b805f2462b` |
 | `kntrl-license-core/src/error.rs` | `74b96d0e2ae382184e7665576379cda6f234ecd6d03e5547118f39467ee64a13` |
 
-## Called from `COSE_Sign1` verify ()
+## Called from `COSE_Sign1` verify
 
 Path: `verify` → `decode_protected_header` → `read_map_header` / `next_map_key` → `read_uint`.
 
@@ -45,7 +45,7 @@ public `&[u8]` wrapper `read_uint` so the theorem is a function of hostile bytes
 (Binder `parse_one` shape). No `while` / `for` / recursion on input length.
 
 `Reader<'a>` + `&mut self` extracted. Aeneas erased the lifetime (`structure Reader`
-with `buf : Slice U8` and `pos : Usize`).  free-function fallback was not
+with `buf : Slice U8` and `pos : Usize`). The free-function fallback was not
 needed.
 
 ## Line map (copied path)
@@ -89,7 +89,7 @@ would have been extra axioms on the theorem. Loop-free remodel, same bytes:
 |---|---|---|
 | `x.ok_or(UnexpectedEnd)?` | `match x { Some(v) => v, None => return Err(UnexpectedEnd) }` | drop `ok_or` axiom |
 | `take(1)?.first().copied().ok_or(...)` | `get_u8(take(1)?, 0)?` | drop `first`/`copied`/`ok_or` |
-| `bytes.try_into().map_err(...)` for `[u8; 2/4/8]` | `get_u8(bytes, i)?` into `from_be_bytes([...])` | drop `try_into`/`map_err` (Binder trap trap) |
+| `bytes.try_into().map_err(...)` for `[u8; 2/4/8]` | `get_u8(bytes, i)?` into `from_be_bytes([...])` | drop `try_into`/`map_err` (Binder trap) |
 | `u8::try_from(value).is_ok()` | `value <= u64::from(u8::MAX)` (and u16/u32) | drop integer `TryFrom` axiom; same bound |
 | `#[derive(Debug, Clone, Copy)]` on `Reader` | dropped | drop unused slice `fmt` axiom |
 
@@ -484,7 +484,7 @@ Called from `COSE_Sign1` `verify` after `decode_protected_header`, before dalek.
 This crate does **not** compose envelope + header + sig-structure into
 `parse_sign1`.
 
-Public entry point (Binder `parse_one` shape, Binder trap buffer-by-value):
+Public entry point (Binder `parse_one` shape, Binder buffer-by-value):
 
 - `build_sig_structure(typ, protected, payload) -> Result<SigStructure, CoseError>`
 
@@ -522,8 +522,8 @@ fits (headers + `"Signature1"` + aad + both bstrs). Source already returns
 | Crate | Why |
 |---|---|
 | No `Sink` trait / no `Vec` sink | Charon/Aeneas choke on the trait; only `SliceSink` is on verify |
-| `SliceSink` owns `[u8; 4096]` | Binder trap: Binder closed `FnOnce` + `&mut [u8; N]` with buffer-by-value |
-| `build_sig_structure` does not take `out: &mut [u8]` | same Binder trap close; returns `SigStructure` |
+| `SliceSink` owns `[u8; 4096]` | Binder: Binder closed `FnOnce` + `&mut [u8; N]` with buffer-by-value |
+| `build_sig_structure` does not take `out: &mut [u8]` | same Binder close; returns `SigStructure` |
 | `write_*` take `&mut SliceSink`, not `impl Sink` | concrete sink only |
 | `write_text` takes `&[u8]` | source `&str` / `as_bytes` was an unknown-external axiom |
 | AAD written as byte literals in `build_sig_structure` | same match as `external_aad`; avoids `'static` global + `&mut` sink |
@@ -543,7 +543,7 @@ fits (headers + `"Signature1"` + aad + both bstrs). Source already returns
 
 Aeneas did **not** lower `copy_from_slice` to a loop. First extraction of
 borrowed `&mut [u8; 4096]` failed (see `reports/AENEAS.md`); the owned-array
-remodel is the one allowed Binder trap close. No second copy remodel. No loop
+remodel is the one allowed Binder close. No second copy remodel. No loop
 lemma. No `STOP.md`.
 
 ## Not extracted (after layer 5)
@@ -659,7 +659,7 @@ No `while` / `for` / recursion on input length. No dalek.
 | `parse_sign1` does not exist in source | `verify` minus crypto; theorem entry point |
 | No `expected_pubkey` argument | crypto is outside the parse |
 | Composes three helpers instead of inlining the reader | same bytes as 222–234; helpers already proved |
-| `build_sig_structure` returns owned `SigStructure` | already extracted (Binder trap buffer-by-value); discarded |
+| `build_sig_structure` returns owned `SigStructure` | already extracted (Binder buffer-by-value); discarded |
 | `Parsed` without `Debug`/`Clone`/`Copy` | same unused slice-`fmt` reason as `Envelope` |
 | No dalek / `verify_strict` / `VerifyingKey` | CUT 241–246 |
 
