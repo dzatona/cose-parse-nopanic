@@ -15,7 +15,7 @@ set_option maxRecDepth 2048
 namespace cbor_nopanic
 
 /-- [cbor_nopanic::CodecError]
-    Source: 'src/lib.rs', lines 26:0-49:1
+    Source: 'src/lib.rs', lines 28:0-53:1
     Visibility: public -/
 @[discriminant isize]
 inductive CodecError where
@@ -29,9 +29,10 @@ inductive CodecError where
 | TrailingBytes : CodecError
 | NonCanonicalKeyOrder : CodecError
 | InvalidEnumValue : CodecError
+| BufferTooSmall : CodecError
 
 /-- [cbor_nopanic::{impl core::fmt::Debug for cbor_nopanic::CodecError}::fmt]:
-    Source: 'src/lib.rs', lines 25:9-25:14
+    Source: 'src/lib.rs', lines 27:9-27:14
     Visibility: public -/
 def CodecError.Insts.CoreFmtDebug.fmt
   (self : CodecError) (f : core.fmt.Formatter) :
@@ -58,44 +59,46 @@ def CodecError.Insts.CoreFmtDebug.fmt
     core.fmt.Formatter.write_str f (toStr "NonCanonicalKeyOrder")
   | CodecError.InvalidEnumValue =>
     core.fmt.Formatter.write_str f (toStr "InvalidEnumValue")
+  | CodecError.BufferTooSmall =>
+    core.fmt.Formatter.write_str f (toStr "BufferTooSmall")
 
 /-- Trait implementation: [cbor_nopanic::{impl core::fmt::Debug for cbor_nopanic::CodecError}]
-    Source: 'src/lib.rs', lines 25:9-25:14 -/
+    Source: 'src/lib.rs', lines 27:9-27:14 -/
 @[reducible]
 def CodecError.Insts.CoreFmtDebug : core.fmt.Debug CodecError := {
   fmt := CodecError.Insts.CoreFmtDebug.fmt
 }
 
 /-- [cbor_nopanic::{impl core::clone::Clone for cbor_nopanic::CodecError}::clone]:
-    Source: 'src/lib.rs', lines 25:16-25:21
+    Source: 'src/lib.rs', lines 27:16-27:21
     Visibility: public -/
 def CodecError.Insts.CoreCloneClone.clone
   (self : CodecError) : Result CodecError := do
   ok self
 
 /-- Trait implementation: [cbor_nopanic::{impl core::clone::Clone for cbor_nopanic::CodecError}]
-    Source: 'src/lib.rs', lines 25:16-25:21 -/
+    Source: 'src/lib.rs', lines 27:16-27:21 -/
 @[reducible]
 def CodecError.Insts.CoreCloneClone : core.clone.Clone CodecError := {
   clone := CodecError.Insts.CoreCloneClone.clone
 }
 
 /-- Trait implementation: [cbor_nopanic::{impl core::marker::Copy for cbor_nopanic::CodecError}]
-    Source: 'src/lib.rs', lines 25:23-25:27 -/
+    Source: 'src/lib.rs', lines 27:23-27:27 -/
 @[reducible]
 def CodecError.Insts.CoreMarkerCopy : core.marker.Copy CodecError := {
   cloneInst := CodecError.Insts.CoreCloneClone
 }
 
 /-- Trait implementation: [cbor_nopanic::{impl core::marker::StructuralPartialEq for cbor_nopanic::CodecError}]
-    Source: 'src/lib.rs', lines 25:29-25:38 -/
+    Source: 'src/lib.rs', lines 27:29-27:38 -/
 @[reducible]
 def CodecError.Insts.CoreMarkerStructuralPartialEq :
   core.marker.StructuralPartialEq CodecError := {
 }
 
 /-- [cbor_nopanic::{impl core::cmp::PartialEq<cbor_nopanic::CodecError> for cbor_nopanic::CodecError}::eq]:
-    Source: 'src/lib.rs', lines 25:29-25:38
+    Source: 'src/lib.rs', lines 27:29-27:38
     Visibility: public -/
 def CodecError.Insts.CoreCmpPartialEqCodecError.eq
   (self : CodecError) (other : CodecError) : Result Bool := do
@@ -104,7 +107,7 @@ def CodecError.Insts.CoreCmpPartialEqCodecError.eq
   ok (self1 = other1)
 
 /-- Trait implementation: [cbor_nopanic::{impl core::cmp::PartialEq<cbor_nopanic::CodecError> for cbor_nopanic::CodecError}]
-    Source: 'src/lib.rs', lines 25:29-25:38 -/
+    Source: 'src/lib.rs', lines 27:29-27:38 -/
 @[reducible]
 def CodecError.Insts.CoreCmpPartialEqCodecError : core.cmp.PartialEq CodecError
   CodecError := {
@@ -112,14 +115,14 @@ def CodecError.Insts.CoreCmpPartialEqCodecError : core.cmp.PartialEq CodecError
 }
 
 /-- [cbor_nopanic::{impl core::cmp::Eq for cbor_nopanic::CodecError}::assert_fields_are_eq]:
-    Source: 'src/lib.rs', lines 25:40-25:42
+    Source: 'src/lib.rs', lines 27:40-27:42
     Visibility: public -/
 def CodecError.Insts.CoreCmpEq.assert_fields_are_eq
   (self : CodecError) : Result Unit := do
   ok ()
 
 /-- Trait implementation: [cbor_nopanic::{impl core::cmp::Eq for cbor_nopanic::CodecError}]
-    Source: 'src/lib.rs', lines 25:40-25:42 -/
+    Source: 'src/lib.rs', lines 27:40-27:42 -/
 @[reducible]
 def CodecError.Insts.CoreCmpEq : core.cmp.Eq CodecError := {
   partialEqInst := CodecError.Insts.CoreCmpPartialEqCodecError
@@ -127,7 +130,7 @@ def CodecError.Insts.CoreCmpEq : core.cmp.Eq CodecError := {
 }
 
 /-- [cbor_nopanic::CoseError]
-    Source: 'src/lib.rs', lines 60:0-73:1
+    Source: 'src/lib.rs', lines 64:0-77:1
     Visibility: public -/
 @[discriminant isize]
 inductive CoseError where
@@ -139,7 +142,7 @@ inductive CoseError where
 | UnknownTyp : CoseError
 
 /-- [cbor_nopanic::{impl core::fmt::Debug for cbor_nopanic::CoseError}::fmt]:
-    Source: 'src/lib.rs', lines 59:9-59:14
+    Source: 'src/lib.rs', lines 63:9-63:14
     Visibility: public -/
 def CoseError.Insts.CoreFmtDebug.fmt
   (self : CoseError) (f : core.fmt.Formatter) :
@@ -161,42 +164,42 @@ def CoseError.Insts.CoreFmtDebug.fmt
   | CoseError.UnknownTyp => core.fmt.Formatter.write_str f (toStr "UnknownTyp")
 
 /-- Trait implementation: [cbor_nopanic::{impl core::fmt::Debug for cbor_nopanic::CoseError}]
-    Source: 'src/lib.rs', lines 59:9-59:14 -/
+    Source: 'src/lib.rs', lines 63:9-63:14 -/
 @[reducible]
 def CoseError.Insts.CoreFmtDebug : core.fmt.Debug CoseError := {
   fmt := CoseError.Insts.CoreFmtDebug.fmt
 }
 
 /-- [cbor_nopanic::{impl core::clone::Clone for cbor_nopanic::CoseError}::clone]:
-    Source: 'src/lib.rs', lines 59:16-59:21
+    Source: 'src/lib.rs', lines 63:16-63:21
     Visibility: public -/
 def CoseError.Insts.CoreCloneClone.clone
   (self : CoseError) : Result CoseError := do
   ok self
 
 /-- Trait implementation: [cbor_nopanic::{impl core::clone::Clone for cbor_nopanic::CoseError}]
-    Source: 'src/lib.rs', lines 59:16-59:21 -/
+    Source: 'src/lib.rs', lines 63:16-63:21 -/
 @[reducible]
 def CoseError.Insts.CoreCloneClone : core.clone.Clone CoseError := {
   clone := CoseError.Insts.CoreCloneClone.clone
 }
 
 /-- Trait implementation: [cbor_nopanic::{impl core::marker::Copy for cbor_nopanic::CoseError}]
-    Source: 'src/lib.rs', lines 59:23-59:27 -/
+    Source: 'src/lib.rs', lines 63:23-63:27 -/
 @[reducible]
 def CoseError.Insts.CoreMarkerCopy : core.marker.Copy CoseError := {
   cloneInst := CoseError.Insts.CoreCloneClone
 }
 
 /-- Trait implementation: [cbor_nopanic::{impl core::marker::StructuralPartialEq for cbor_nopanic::CoseError}]
-    Source: 'src/lib.rs', lines 59:29-59:38 -/
+    Source: 'src/lib.rs', lines 63:29-63:38 -/
 @[reducible]
 def CoseError.Insts.CoreMarkerStructuralPartialEq :
   core.marker.StructuralPartialEq CoseError := {
 }
 
 /-- [cbor_nopanic::{impl core::cmp::PartialEq<cbor_nopanic::CoseError> for cbor_nopanic::CoseError}::eq]:
-    Source: 'src/lib.rs', lines 59:29-59:38
+    Source: 'src/lib.rs', lines 63:29-63:38
     Visibility: public -/
 def CoseError.Insts.CoreCmpPartialEqCoseError.eq
   (self : CoseError) (other : CoseError) : Result Bool := do
@@ -222,7 +225,7 @@ def CoseError.Insts.CoreCmpPartialEqCoseError.eq
   else ok false
 
 /-- Trait implementation: [cbor_nopanic::{impl core::cmp::PartialEq<cbor_nopanic::CoseError> for cbor_nopanic::CoseError}]
-    Source: 'src/lib.rs', lines 59:29-59:38 -/
+    Source: 'src/lib.rs', lines 63:29-63:38 -/
 @[reducible]
 def CoseError.Insts.CoreCmpPartialEqCoseError : core.cmp.PartialEq CoseError
   CoseError := {
@@ -230,14 +233,14 @@ def CoseError.Insts.CoreCmpPartialEqCoseError : core.cmp.PartialEq CoseError
 }
 
 /-- [cbor_nopanic::{impl core::cmp::Eq for cbor_nopanic::CoseError}::assert_fields_are_eq]:
-    Source: 'src/lib.rs', lines 59:40-59:42
+    Source: 'src/lib.rs', lines 63:40-63:42
     Visibility: public -/
 def CoseError.Insts.CoreCmpEq.assert_fields_are_eq
   (self : CoseError) : Result Unit := do
   ok ()
 
 /-- Trait implementation: [cbor_nopanic::{impl core::cmp::Eq for cbor_nopanic::CoseError}]
-    Source: 'src/lib.rs', lines 59:40-59:42 -/
+    Source: 'src/lib.rs', lines 63:40-63:42 -/
 @[reducible]
 def CoseError.Insts.CoreCmpEq : core.cmp.Eq CoseError := {
   partialEqInst := CoseError.Insts.CoreCmpPartialEqCoseError
@@ -245,14 +248,14 @@ def CoseError.Insts.CoreCmpEq : core.cmp.Eq CoseError := {
 }
 
 /-- [cbor_nopanic::{impl core::convert::From<cbor_nopanic::CodecError> for cbor_nopanic::CoseError}::from]:
-    Source: 'src/lib.rs', lines 79:4-81:5
+    Source: 'src/lib.rs', lines 83:4-85:5
     Visibility: public -/
 def CoseError.Insts.CoreConvertFromCodecError.from
   (error : CodecError) : Result CoseError := do
   ok (CoseError.Codec error)
 
 /-- Trait implementation: [cbor_nopanic::{impl core::convert::From<cbor_nopanic::CodecError> for cbor_nopanic::CoseError}]
-    Source: 'src/lib.rs', lines 78:0-82:1 -/
+    Source: 'src/lib.rs', lines 82:0-86:1 -/
 @[reducible]
 def CoseError.Insts.CoreConvertFromCodecError : core.convert.From CoseError
   CodecError := {
@@ -260,40 +263,49 @@ def CoseError.Insts.CoreConvertFromCodecError : core.convert.From CoseError
 }
 
 /-- [cbor_nopanic::MAJOR_UNSIGNED]
-    Source: 'src/lib.rs', lines 85:0-85:32 -/
+    Source: 'src/lib.rs', lines 89:0-89:32 -/
 @[global_simps, irreducible] def MAJOR_UNSIGNED : Std.U8 := 0#u8
 
 /-- [cbor_nopanic::MAJOR_NEGATIVE]
-    Source: 'src/lib.rs', lines 87:0-87:32 -/
+    Source: 'src/lib.rs', lines 91:0-91:32 -/
 @[global_simps, irreducible] def MAJOR_NEGATIVE : Std.U8 := 32#u8
 
 /-- [cbor_nopanic::MAJOR_BSTR]
-    Source: 'src/lib.rs', lines 89:0-89:28 -/
+    Source: 'src/lib.rs', lines 93:0-93:28 -/
 @[global_simps, irreducible] def MAJOR_BSTR : Std.U8 := 64#u8
 
+/-- [cbor_nopanic::MAJOR_TEXT]
+    Source: 'src/lib.rs', lines 95:0-95:28 -/
+@[global_simps, irreducible] def MAJOR_TEXT : Std.U8 := 96#u8
+
 /-- [cbor_nopanic::MAJOR_ARRAY]
-    Source: 'src/lib.rs', lines 91:0-91:29 -/
+    Source: 'src/lib.rs', lines 97:0-97:29 -/
 @[global_simps, irreducible] def MAJOR_ARRAY : Std.U8 := 128#u8
 
+/-- [cbor_nopanic::MAX_MESSAGE_LEN]
+    Source: 'src/lib.rs', lines 102:0-102:40
+    Visibility: public -/
+@[global_simps, irreducible] def MAX_MESSAGE_LEN : Std.Usize := 4096#usize
+
 /-- [cbor_nopanic::MAJOR_MAP]
-    Source: 'src/lib.rs', lines 93:0-93:27 -/
+    Source: 'src/lib.rs', lines 104:0-104:27 -/
 @[global_simps, irreducible] def MAJOR_MAP : Std.U8 := 160#u8
 
 /-- [cbor_nopanic::MAJOR_MASK]
-    Source: 'src/lib.rs', lines 95:0-95:28 -/
+    Source: 'src/lib.rs', lines 106:0-106:28 -/
 @[global_simps, irreducible] def MAJOR_MASK : Std.U8 := 224#u8
 
 /-- [cbor_nopanic::ADDITIONAL_MASK]
-    Source: 'src/lib.rs', lines 97:0-97:33 -/
+    Source: 'src/lib.rs', lines 108:0-108:33 -/
 @[global_simps, irreducible] def ADDITIONAL_MASK : Std.U8 := 31#u8
 
 /-- [cbor_nopanic::ALG_EDDSA_BYTE]
-    Source: 'src/lib.rs', lines 99:0-99:49 -/
+    Source: 'src/lib.rs', lines 110:0-110:49 -/
 @[global_simps, irreducible]
 def ALG_EDDSA_BYTE : Std.U8 := MAJOR_NEGATIVE ||| 7#u8
 
 /-- [cbor_nopanic::Typ]
-    Source: 'src/lib.rs', lines 107:0-116:1
+    Source: 'src/lib.rs', lines 118:0-127:1
     Visibility: public -/
 @[discriminant isize]
 inductive Typ where
@@ -303,7 +315,7 @@ inductive Typ where
 | TrustUpdate : Typ
 
 /-- [cbor_nopanic::{impl core::fmt::Debug for cbor_nopanic::Typ}::fmt]:
-    Source: 'src/lib.rs', lines 106:9-106:14
+    Source: 'src/lib.rs', lines 117:9-117:14
     Visibility: public -/
 def Typ.Insts.CoreFmtDebug.fmt
   (self : Typ) (f : core.fmt.Formatter) :
@@ -316,41 +328,41 @@ def Typ.Insts.CoreFmtDebug.fmt
   | Typ.TrustUpdate => core.fmt.Formatter.write_str f (toStr "TrustUpdate")
 
 /-- Trait implementation: [cbor_nopanic::{impl core::fmt::Debug for cbor_nopanic::Typ}]
-    Source: 'src/lib.rs', lines 106:9-106:14 -/
+    Source: 'src/lib.rs', lines 117:9-117:14 -/
 @[reducible]
 def Typ.Insts.CoreFmtDebug : core.fmt.Debug Typ := {
   fmt := Typ.Insts.CoreFmtDebug.fmt
 }
 
 /-- [cbor_nopanic::{impl core::clone::Clone for cbor_nopanic::Typ}::clone]:
-    Source: 'src/lib.rs', lines 106:16-106:21
+    Source: 'src/lib.rs', lines 117:16-117:21
     Visibility: public -/
 def Typ.Insts.CoreCloneClone.clone (self : Typ) : Result Typ := do
   ok self
 
 /-- Trait implementation: [cbor_nopanic::{impl core::clone::Clone for cbor_nopanic::Typ}]
-    Source: 'src/lib.rs', lines 106:16-106:21 -/
+    Source: 'src/lib.rs', lines 117:16-117:21 -/
 @[reducible]
 def Typ.Insts.CoreCloneClone : core.clone.Clone Typ := {
   clone := Typ.Insts.CoreCloneClone.clone
 }
 
 /-- Trait implementation: [cbor_nopanic::{impl core::marker::Copy for cbor_nopanic::Typ}]
-    Source: 'src/lib.rs', lines 106:23-106:27 -/
+    Source: 'src/lib.rs', lines 117:23-117:27 -/
 @[reducible]
 def Typ.Insts.CoreMarkerCopy : core.marker.Copy Typ := {
   cloneInst := Typ.Insts.CoreCloneClone
 }
 
 /-- Trait implementation: [cbor_nopanic::{impl core::marker::StructuralPartialEq for cbor_nopanic::Typ}]
-    Source: 'src/lib.rs', lines 106:29-106:38 -/
+    Source: 'src/lib.rs', lines 117:29-117:38 -/
 @[reducible]
 def Typ.Insts.CoreMarkerStructuralPartialEq : core.marker.StructuralPartialEq
   Typ := {
 }
 
 /-- [cbor_nopanic::{impl core::cmp::PartialEq<cbor_nopanic::Typ> for cbor_nopanic::Typ}::eq]:
-    Source: 'src/lib.rs', lines 106:29-106:38
+    Source: 'src/lib.rs', lines 117:29-117:38
     Visibility: public -/
 def Typ.Insts.CoreCmpPartialEqTyp.eq
   (self : Typ) (other : Typ) : Result Bool := do
@@ -359,20 +371,20 @@ def Typ.Insts.CoreCmpPartialEqTyp.eq
   ok (self1 = other1)
 
 /-- Trait implementation: [cbor_nopanic::{impl core::cmp::PartialEq<cbor_nopanic::Typ> for cbor_nopanic::Typ}]
-    Source: 'src/lib.rs', lines 106:29-106:38 -/
+    Source: 'src/lib.rs', lines 117:29-117:38 -/
 @[reducible]
 def Typ.Insts.CoreCmpPartialEqTyp : core.cmp.PartialEq Typ Typ := {
   eq := Typ.Insts.CoreCmpPartialEqTyp.eq
 }
 
 /-- [cbor_nopanic::{impl core::cmp::Eq for cbor_nopanic::Typ}::assert_fields_are_eq]:
-    Source: 'src/lib.rs', lines 106:40-106:42
+    Source: 'src/lib.rs', lines 117:40-117:42
     Visibility: public -/
 def Typ.Insts.CoreCmpEq.assert_fields_are_eq (self : Typ) : Result Unit := do
   ok ()
 
 /-- Trait implementation: [cbor_nopanic::{impl core::cmp::Eq for cbor_nopanic::Typ}]
-    Source: 'src/lib.rs', lines 106:40-106:42 -/
+    Source: 'src/lib.rs', lines 117:40-117:42 -/
 @[reducible]
 def Typ.Insts.CoreCmpEq : core.cmp.Eq Typ := {
   partialEqInst := Typ.Insts.CoreCmpPartialEqTyp
@@ -380,7 +392,7 @@ def Typ.Insts.CoreCmpEq : core.cmp.Eq Typ := {
 }
 
 /-- [cbor_nopanic::{cbor_nopanic::Typ}::from_u64]:
-    Source: 'src/lib.rs', lines 123:4-131:5
+    Source: 'src/lib.rs', lines 134:4-142:5
     Visibility: public -/
 def Typ.from_u64
   (value : Std.U64) : Result (core.result.Result Typ CodecError) := do
@@ -391,28 +403,83 @@ def Typ.from_u64
   | 4#uscalar => ok (core.result.Result.Ok Typ.TrustUpdate)
   | _ => ok (core.result.Result.Err CodecError.InvalidEnumValue)
 
+/-- [cbor_nopanic::AAD_LICENSE]
+    Source: 'src/lib.rs', lines 146:0-146:51
+    Visibility: public -/
+@[global_simps, irreducible]
+def AAD_LICENSE : Slice Std.U8 :=
+  Array.to_slice
+    (Array.make 16#usize [
+      107#u8, 110#u8, 116#u8, 114#u8, 108#u8, 47#u8, 108#u8, 105#u8, 99#u8,
+      101#u8, 110#u8, 115#u8, 101#u8, 47#u8, 118#u8, 49#u8
+      ])
+
+/-- [cbor_nopanic::AAD_ENROLL]
+    Source: 'src/lib.rs', lines 148:0-148:49
+    Visibility: public -/
+@[global_simps, irreducible]
+def AAD_ENROLL : Slice Std.U8 :=
+  Array.to_slice
+    (Array.make 15#usize [
+      107#u8, 110#u8, 116#u8, 114#u8, 108#u8, 47#u8, 101#u8, 110#u8, 114#u8,
+      111#u8, 108#u8, 108#u8, 47#u8, 118#u8, 49#u8
+      ])
+
+/-- [cbor_nopanic::AAD_REVOKE]
+    Source: 'src/lib.rs', lines 150:0-150:49
+    Visibility: public -/
+@[global_simps, irreducible]
+def AAD_REVOKE : Slice Std.U8 :=
+  Array.to_slice
+    (Array.make 15#usize [
+      107#u8, 110#u8, 116#u8, 114#u8, 108#u8, 47#u8, 114#u8, 101#u8, 118#u8,
+      111#u8, 107#u8, 101#u8, 47#u8, 118#u8, 49#u8
+      ])
+
+/-- [cbor_nopanic::AAD_TRUST_UPDATE]
+    Source: 'src/lib.rs', lines 152:0-152:61
+    Visibility: public -/
+@[global_simps, irreducible]
+def AAD_TRUST_UPDATE : Slice Std.U8 :=
+  Array.to_slice
+    (Array.make 21#usize [
+      107#u8, 110#u8, 116#u8, 114#u8, 108#u8, 47#u8, 116#u8, 114#u8, 117#u8,
+      115#u8, 116#u8, 45#u8, 117#u8, 112#u8, 100#u8, 97#u8, 116#u8, 101#u8,
+      47#u8, 118#u8, 49#u8
+      ])
+
+/-- [cbor_nopanic::external_aad]:
+    Source: 'src/lib.rs', lines 159:0-166:1
+    Visibility: public -/
+def external_aad (typ : Typ) : Result (Slice Std.U8) := do
+  match typ with
+  | Typ.License => ok AAD_LICENSE
+  | Typ.Enroll => ok AAD_ENROLL
+  | Typ.Revoke => ok AAD_REVOKE
+  | Typ.TrustUpdate => ok AAD_TRUST_UPDATE
+
 /-- [cbor_nopanic::Reader]
-    Source: 'src/lib.rs', lines 140:0-143:1
+    Source: 'src/lib.rs', lines 174:0-177:1
     Visibility: public -/
 structure Reader where
   buf : Slice Std.U8
   pos : Std.Usize
 
 /-- [cbor_nopanic::{cbor_nopanic::Reader<'a>}::new]:
-    Source: 'src/lib.rs', lines 148:4-150:5
+    Source: 'src/lib.rs', lines 182:4-184:5
     Visibility: public -/
 def Reader.new (buf : Slice Std.U8) : Result Reader := do
   ok { buf, pos := 0#usize }
 
 /-- [cbor_nopanic::{cbor_nopanic::Reader<'a>}::is_empty]:
-    Source: 'src/lib.rs', lines 154:4-156:5
+    Source: 'src/lib.rs', lines 188:4-190:5
     Visibility: public -/
 def Reader.is_empty (self : Reader) : Result Bool := do
   let i := Slice.len self.buf
   ok (self.pos = i)
 
 /-- [cbor_nopanic::{cbor_nopanic::Reader<'a>}::finish]:
-    Source: 'src/lib.rs', lines 162:4-168:5
+    Source: 'src/lib.rs', lines 196:4-202:5
     Visibility: public -/
 def Reader.finish
   (self : Reader) : Result (core.result.Result Unit CodecError) := do
@@ -422,7 +489,7 @@ def Reader.finish
   else ok (core.result.Result.Err CodecError.TrailingBytes)
 
 /-- [cbor_nopanic::{cbor_nopanic::Reader<'a>}::take]:
-    Source: 'src/lib.rs', lines 174:4-188:5 -/
+    Source: 'src/lib.rs', lines 208:4-222:5 -/
 def Reader.take
   (self : Reader) (n : Std.Usize) :
   Result ((core.result.Result (Slice Std.U8) CodecError) × Reader)
@@ -439,7 +506,7 @@ def Reader.take
     | some out => ok (core.result.Result.Ok out, { self with pos := end1 })
 
 /-- [cbor_nopanic::get_u8]:
-    Source: 'src/lib.rs', lines 391:0-396:1 -/
+    Source: 'src/lib.rs', lines 425:0-430:1 -/
 def get_u8
   (bytes : Slice Std.U8) (i : Std.Usize) :
   Result (core.result.Result Std.U8 CodecError)
@@ -451,7 +518,7 @@ def get_u8
   | some b => ok (core.result.Result.Ok b)
 
 /-- [cbor_nopanic::{cbor_nopanic::Reader<'a>}::read_head]:
-    Source: 'src/lib.rs', lines 199:4-261:5 -/
+    Source: 'src/lib.rs', lines 233:4-295:5 -/
 def Reader.read_head
   (self : Reader) (major_base : Std.U8) :
   Result ((core.result.Result Std.U64 CodecError) × Reader)
@@ -724,7 +791,7 @@ def Reader.read_head
     ok (r1, self1)
 
 /-- [cbor_nopanic::{cbor_nopanic::Reader<'a>}::read_uint]:
-    Source: 'src/lib.rs', lines 269:4-271:5
+    Source: 'src/lib.rs', lines 303:4-305:5
     Visibility: public -/
 def Reader.read_uint
   (self : Reader) :
@@ -733,7 +800,7 @@ def Reader.read_uint
   Reader.read_head self MAJOR_UNSIGNED
 
 /-- [cbor_nopanic::{cbor_nopanic::Reader<'a>}::read_bstr]:
-    Source: 'src/lib.rs', lines 280:4-290:5
+    Source: 'src/lib.rs', lines 314:4-324:5
     Visibility: public -/
 def Reader.read_bstr
   (self : Reader) :
@@ -755,7 +822,7 @@ def Reader.read_bstr
     ok (r1, self1)
 
 /-- [cbor_nopanic::{cbor_nopanic::Reader<'a>}::read_bstr_fixed_64]:
-    Source: 'src/lib.rs', lines 301:4-310:5
+    Source: 'src/lib.rs', lines 335:4-344:5
     Visibility: public -/
 def Reader.read_bstr_fixed_64
   (self : Reader) :
@@ -778,7 +845,7 @@ def Reader.read_bstr_fixed_64
     ok (r1, self1)
 
 /-- [cbor_nopanic::{cbor_nopanic::Reader<'a>}::read_bstr_fixed_16]:
-    Source: 'src/lib.rs', lines 321:4-330:5
+    Source: 'src/lib.rs', lines 355:4-364:5
     Visibility: public -/
 def Reader.read_bstr_fixed_16
   (self : Reader) :
@@ -801,7 +868,7 @@ def Reader.read_bstr_fixed_16
     ok (r1, self1)
 
 /-- [cbor_nopanic::{cbor_nopanic::Reader<'a>}::read_array_header]:
-    Source: 'src/lib.rs', lines 336:4-338:5
+    Source: 'src/lib.rs', lines 370:4-372:5
     Visibility: public -/
 def Reader.read_array_header
   (self : Reader) :
@@ -810,7 +877,7 @@ def Reader.read_array_header
   Reader.read_head self MAJOR_ARRAY
 
 /-- [cbor_nopanic::{cbor_nopanic::Reader<'a>}::read_map_header]:
-    Source: 'src/lib.rs', lines 344:4-346:5
+    Source: 'src/lib.rs', lines 378:4-380:5
     Visibility: public -/
 def Reader.read_map_header
   (self : Reader) :
@@ -819,7 +886,7 @@ def Reader.read_map_header
   Reader.read_head self MAJOR_MAP
 
 /-- [cbor_nopanic::{cbor_nopanic::Reader<'a>}::read_fixed_byte]:
-    Source: 'src/lib.rs', lines 353:4-362:5
+    Source: 'src/lib.rs', lines 387:4-396:5
     Visibility: public -/
 def Reader.read_fixed_byte
   (self : Reader) (expected : Std.U8) :
@@ -848,7 +915,7 @@ def Reader.read_fixed_byte
     ok (r1, self1)
 
 /-- [cbor_nopanic::{cbor_nopanic::Reader<'a>}::next_map_key]:
-    Source: 'src/lib.rs', lines 370:4-382:5
+    Source: 'src/lib.rs', lines 404:4-416:5
     Visibility: public -/
 def Reader.next_map_key
   (self : Reader) (last_key : Option Std.U64) :
@@ -874,7 +941,7 @@ def Reader.next_map_key
     ok (r1, self1, last_key)
 
 /-- [cbor_nopanic::read_uint]:
-    Source: 'src/lib.rs', lines 404:0-408:1
+    Source: 'src/lib.rs', lines 438:0-442:1
     Visibility: public -/
 def read_uint
   (buf : Slice Std.U8) : Result (core.result.Result Std.U64 CodecError) := do
@@ -883,7 +950,7 @@ def read_uint
   ok r
 
 /-- [cbor_nopanic::read_bstr]:
-    Source: 'src/lib.rs', lines 416:0-420:1
+    Source: 'src/lib.rs', lines 450:0-454:1
     Visibility: public -/
 def read_bstr
   (buf : Slice Std.U8) :
@@ -894,7 +961,7 @@ def read_bstr
   ok r
 
 /-- [cbor_nopanic::read_bstr_fixed_64]:
-    Source: 'src/lib.rs', lines 428:0-432:1
+    Source: 'src/lib.rs', lines 462:0-466:1
     Visibility: public -/
 def read_bstr_fixed_64
   (buf : Slice Std.U8) :
@@ -905,7 +972,7 @@ def read_bstr_fixed_64
   ok r
 
 /-- [cbor_nopanic::read_array_header]:
-    Source: 'src/lib.rs', lines 440:0-444:1
+    Source: 'src/lib.rs', lines 474:0-478:1
     Visibility: public -/
 def read_array_header
   (buf : Slice Std.U8) : Result (core.result.Result Std.U64 CodecError) := do
@@ -914,7 +981,7 @@ def read_array_header
   ok r
 
 /-- [cbor_nopanic::read_map_header]:
-    Source: 'src/lib.rs', lines 452:0-456:1
+    Source: 'src/lib.rs', lines 486:0-490:1
     Visibility: public -/
 def read_map_header
   (buf : Slice Std.U8) : Result (core.result.Result Std.U64 CodecError) := do
@@ -923,7 +990,7 @@ def read_map_header
   ok r
 
 /-- [cbor_nopanic::Envelope]
-    Source: 'src/lib.rs', lines 464:0-471:1
+    Source: 'src/lib.rs', lines 498:0-505:1
     Visibility: public -/
 structure Envelope where
   «protected» : Slice Std.U8
@@ -931,7 +998,7 @@ structure Envelope where
   signature : Array Std.U8 64#usize
 
 /-- [cbor_nopanic::read_sign1_envelope]:
-    Source: 'src/lib.rs', lines 492:0-511:1
+    Source: 'src/lib.rs', lines 526:0-545:1
     Visibility: public -/
 def read_sign1_envelope
   (buf : Slice Std.U8) : Result (core.result.Result Envelope CoseError) := do
@@ -989,7 +1056,7 @@ def read_sign1_envelope
       Envelope CoseError.Insts.CoreConvertFromCodecError residual
 
 /-- [cbor_nopanic::decode_protected_header]:
-    Source: 'src/lib.rs', lines 525:0-564:1
+    Source: 'src/lib.rs', lines 559:0-598:1
     Visibility: public -/
 def decode_protected_header
   (bytes : Slice Std.U8) :
@@ -1082,5 +1149,462 @@ def decode_protected_header
     core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
       ((Array Std.U8 16#usize) × Typ)
       CoseError.Insts.CoreConvertFromCodecError residual
+
+/-- [cbor_nopanic::SliceSink]
+    Source: 'src/lib.rs', lines 605:0-608:1 -/
+structure SliceSink where
+  buf : Array Std.U8 4096#usize
+  len : Std.Usize
+
+/-- [cbor_nopanic::{cbor_nopanic::SliceSink}::new]:
+    Source: 'src/lib.rs', lines 613:4-618:5 -/
+def SliceSink.new : Result SliceSink := do
+  let a := Array.repeat 4096#usize 0#u8
+  ok { buf := a, len := 0#usize }
+
+/-- [cbor_nopanic::{cbor_nopanic::SliceSink}::len]:
+    Source: 'src/lib.rs', lines 621:4-623:5 -/
+def SliceSink.impl.len (self : SliceSink) : Result Std.Usize := do
+  ok self.len
+
+/-- [cbor_nopanic::{cbor_nopanic::SliceSink}::write_bytes]:
+    Source: 'src/lib.rs', lines 629:4-652:5 -/
+def SliceSink.write_bytes
+  (self : SliceSink) (bytes : Slice Std.U8) :
+  Result ((core.result.Result Unit CodecError) × SliceSink)
+  := do
+  let i := Slice.len bytes
+  let o ← lift (Usize.checked_add self.len i)
+  match o with
+  | none => ok (core.result.Result.Err CodecError.BufferTooSmall, self)
+  | some end1 =>
+    let (s, to_slice_mut_back) ← lift (Array.to_slice_mut self.buf)
+    let (o1, get_mut_back) ←
+      core.slice.Slice.get_mut (core.slice.index.SliceIndexRangeUsizeSlice
+        Std.U8) s { start := self.len, «end» := end1 }
+    match o1 with
+    | none =>
+      let s1 := get_mut_back none
+      let a := to_slice_mut_back s1
+      ok (core.result.Result.Err CodecError.BufferTooSmall,
+        { self with buf := a })
+    | some dest =>
+      let i1 := Slice.len dest
+      let i2 := Slice.len bytes
+      if i1 != i2
+      then
+        let s1 := get_mut_back o1
+        let a := to_slice_mut_back s1
+        ok (core.result.Result.Err CodecError.BufferTooSmall,
+          { self with buf := a })
+      else
+        let dest1 ←
+          core.slice.Slice.copy_from_slice core.marker.CopyU8 dest bytes
+        let s1 := get_mut_back (some dest1)
+        let a := to_slice_mut_back s1
+        ok (core.result.Result.Ok (), { buf := a, len := end1 })
+
+/-- [cbor_nopanic::be_byte]:
+    Source: 'src/lib.rs', lines 660:0-665:1 -/
+def be_byte
+  (be : Array Std.U8 8#usize) (i : Std.Usize) :
+  Result (core.result.Result Std.U8 CodecError)
+  := do
+  let s ← lift (Array.to_slice be)
+  let o ←
+    core.slice.Slice.get (core.slice.index.SliceIndexUsizeSlice Std.U8) s i
+  match o with
+  | none => ok (core.result.Result.Err CodecError.BufferTooSmall)
+  | some b => ok (core.result.Result.Ok b)
+
+/-- [cbor_nopanic::write_head]:
+    Source: 'src/lib.rs', lines 673:0-712:1 -/
+def write_head
+  (sink : SliceSink) (major_base : Std.U8) (arg : Std.U64) :
+  Result ((core.result.Result Unit CodecError) × SliceSink)
+  := do
+  if arg < 24#u64
+  then
+    let small ← lift (UScalar.cast .U8 arg)
+    let i ← lift (major_base ||| small)
+    let s ← lift (Array.to_slice (Array.make 1#usize [ i ]))
+    SliceSink.write_bytes sink s
+  else
+    let be ← lift (core.num.U64.to_be_bytes arg)
+    let i ← lift (core.convert.num.FromU64U8.from core.num.U8.MAX)
+    if arg <= i
+    then
+      let r ← be_byte be 7#usize
+      let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+      match cf with
+      | core.ops.control_flow.ControlFlow.Continue val =>
+        let i1 ← lift (major_base ||| 24#u8)
+        let s ← lift (Array.to_slice (Array.make 2#usize [ i1, val ]))
+        SliceSink.write_bytes sink s
+      | core.ops.control_flow.ControlFlow.Break residual =>
+        let r1 ←
+          core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+            Unit (core.convert.FromSame CodecError) residual
+        ok (r1, sink)
+    else
+      let i1 ← lift (core.convert.num.FromU64U16.from core.num.U16.MAX)
+      if arg <= i1
+      then
+        let i2 ← lift (major_base ||| 25#u8)
+        let r ← be_byte be 6#usize
+        let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+        match cf with
+        | core.ops.control_flow.ControlFlow.Continue val =>
+          let r1 ← be_byte be 7#usize
+          let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r1
+          match cf1 with
+          | core.ops.control_flow.ControlFlow.Continue val1 =>
+            let s ←
+              lift (Array.to_slice (Array.make 3#usize [ i2, val, val1 ]))
+            SliceSink.write_bytes sink s
+          | core.ops.control_flow.ControlFlow.Break residual =>
+            let r2 ←
+              core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+                Unit (core.convert.FromSame CodecError) residual
+            ok (r2, sink)
+        | core.ops.control_flow.ControlFlow.Break residual =>
+          let r1 ←
+            core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+              Unit (core.convert.FromSame CodecError) residual
+          ok (r1, sink)
+      else
+        let i2 ← lift (core.convert.num.FromU64U32.from core.num.U32.MAX)
+        if arg <= i2
+        then
+          let i3 ← lift (major_base ||| 26#u8)
+          let r ← be_byte be 4#usize
+          let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+          match cf with
+          | core.ops.control_flow.ControlFlow.Continue val =>
+            let r1 ← be_byte be 5#usize
+            let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r1
+            match cf1 with
+            | core.ops.control_flow.ControlFlow.Continue val1 =>
+              let r2 ← be_byte be 6#usize
+              let cf2 ← core.result.Result.Insts.CoreOpsTry.branch r2
+              match cf2 with
+              | core.ops.control_flow.ControlFlow.Continue val2 =>
+                let r3 ← be_byte be 7#usize
+                let cf3 ← core.result.Result.Insts.CoreOpsTry.branch r3
+                match cf3 with
+                | core.ops.control_flow.ControlFlow.Continue val3 =>
+                  let s ←
+                    lift (Array.to_slice
+                      (Array.make 5#usize [ i3, val, val1, val2, val3 ]))
+                  SliceSink.write_bytes sink s
+                | core.ops.control_flow.ControlFlow.Break residual =>
+                  let r4 ←
+                    core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+                      Unit (core.convert.FromSame CodecError) residual
+                  ok (r4, sink)
+              | core.ops.control_flow.ControlFlow.Break residual =>
+                let r3 ←
+                  core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+                    Unit (core.convert.FromSame CodecError) residual
+                ok (r3, sink)
+            | core.ops.control_flow.ControlFlow.Break residual =>
+              let r2 ←
+                core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+                  Unit (core.convert.FromSame CodecError) residual
+              ok (r2, sink)
+          | core.ops.control_flow.ControlFlow.Break residual =>
+            let r1 ←
+              core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+                Unit (core.convert.FromSame CodecError) residual
+            ok (r1, sink)
+        else
+          let i3 ← lift (major_base ||| 27#u8)
+          let r ← be_byte be 0#usize
+          let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+          match cf with
+          | core.ops.control_flow.ControlFlow.Continue val =>
+            let r1 ← be_byte be 1#usize
+            let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r1
+            match cf1 with
+            | core.ops.control_flow.ControlFlow.Continue val1 =>
+              let r2 ← be_byte be 2#usize
+              let cf2 ← core.result.Result.Insts.CoreOpsTry.branch r2
+              match cf2 with
+              | core.ops.control_flow.ControlFlow.Continue val2 =>
+                let r3 ← be_byte be 3#usize
+                let cf3 ← core.result.Result.Insts.CoreOpsTry.branch r3
+                match cf3 with
+                | core.ops.control_flow.ControlFlow.Continue val3 =>
+                  let r4 ← be_byte be 4#usize
+                  let cf4 ← core.result.Result.Insts.CoreOpsTry.branch r4
+                  match cf4 with
+                  | core.ops.control_flow.ControlFlow.Continue val4 =>
+                    let r5 ← be_byte be 5#usize
+                    let cf5 ← core.result.Result.Insts.CoreOpsTry.branch r5
+                    match cf5 with
+                    | core.ops.control_flow.ControlFlow.Continue val5 =>
+                      let r6 ← be_byte be 6#usize
+                      let cf6 ← core.result.Result.Insts.CoreOpsTry.branch r6
+                      match cf6 with
+                      | core.ops.control_flow.ControlFlow.Continue val6 =>
+                        let r7 ← be_byte be 7#usize
+                        let cf7 ←
+                          core.result.Result.Insts.CoreOpsTry.branch r7
+                        match cf7 with
+                        | core.ops.control_flow.ControlFlow.Continue val7 =>
+                          let s ←
+                            lift (Array.to_slice
+                              (Array.make 9#usize [
+                                i3, val, val1, val2, val3, val4, val5, val6,
+                                val7
+                                ]))
+                          SliceSink.write_bytes sink s
+                        | core.ops.control_flow.ControlFlow.Break residual =>
+                          let r8 ←
+                            core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+                              Unit (core.convert.FromSame CodecError) residual
+                          ok (r8, sink)
+                      | core.ops.control_flow.ControlFlow.Break residual =>
+                        let r7 ←
+                          core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+                            Unit (core.convert.FromSame CodecError) residual
+                        ok (r7, sink)
+                    | core.ops.control_flow.ControlFlow.Break residual =>
+                      let r6 ←
+                        core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+                          Unit (core.convert.FromSame CodecError) residual
+                      ok (r6, sink)
+                  | core.ops.control_flow.ControlFlow.Break residual =>
+                    let r5 ←
+                      core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+                        Unit (core.convert.FromSame CodecError) residual
+                    ok (r5, sink)
+                | core.ops.control_flow.ControlFlow.Break residual =>
+                  let r4 ←
+                    core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+                      Unit (core.convert.FromSame CodecError) residual
+                  ok (r4, sink)
+              | core.ops.control_flow.ControlFlow.Break residual =>
+                let r3 ←
+                  core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+                    Unit (core.convert.FromSame CodecError) residual
+                ok (r3, sink)
+            | core.ops.control_flow.ControlFlow.Break residual =>
+              let r2 ←
+                core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+                  Unit (core.convert.FromSame CodecError) residual
+              ok (r2, sink)
+          | core.ops.control_flow.ControlFlow.Break residual =>
+            let r1 ←
+              core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+                Unit (core.convert.FromSame CodecError) residual
+            ok (r1, sink)
+
+/-- [cbor_nopanic::write_bstr]:
+    Source: 'src/lib.rs', lines 720:0-727:1 -/
+def write_bstr
+  (sink : SliceSink) (bytes : Slice Std.U8) :
+  Result ((core.result.Result Unit CodecError) × SliceSink)
+  := do
+  let i := Slice.len bytes
+  let len ← lift (UScalar.cast .U64 i)
+  let (r, sink1) ← write_head sink MAJOR_BSTR len
+  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+  match cf with
+  | core.ops.control_flow.ControlFlow.Continue _ =>
+    SliceSink.write_bytes sink1 bytes
+  | core.ops.control_flow.ControlFlow.Break residual =>
+    let r1 ←
+      core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+        Unit (core.convert.FromSame CodecError) residual
+    ok (r1, sink1)
+
+/-- [cbor_nopanic::write_text]:
+    Source: 'src/lib.rs', lines 737:0-742:1 -/
+def write_text
+  (sink : SliceSink) (text : Slice Std.U8) :
+  Result ((core.result.Result Unit CodecError) × SliceSink)
+  := do
+  let i := Slice.len text
+  let len ← lift (UScalar.cast .U64 i)
+  let (r, sink1) ← write_head sink MAJOR_TEXT len
+  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+  match cf with
+  | core.ops.control_flow.ControlFlow.Continue _ =>
+    SliceSink.write_bytes sink1 text
+  | core.ops.control_flow.ControlFlow.Break residual =>
+    let r1 ←
+      core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+        Unit (core.convert.FromSame CodecError) residual
+    ok (r1, sink1)
+
+/-- [cbor_nopanic::write_array_header]:
+    Source: 'src/lib.rs', lines 750:0-752:1 -/
+def write_array_header
+  (sink : SliceSink) (len : Std.U64) :
+  Result ((core.result.Result Unit CodecError) × SliceSink)
+  := do
+  write_head sink MAJOR_ARRAY len
+
+/-- [cbor_nopanic::SigStructure]
+    Source: 'src/lib.rs', lines 759:0-764:1
+    Visibility: public -/
+structure SigStructure where
+  buf : Array Std.U8 4096#usize
+  len : Std.Usize
+
+/-- [cbor_nopanic::build_sig_structure]:
+    Source: 'src/lib.rs', lines 774:0-802:1
+    Visibility: public -/
+def build_sig_structure
+  (typ : Typ) (protected1 : Slice Std.U8) (payload : Slice Std.U8) :
+  Result (core.result.Result SigStructure CoseError)
+  := do
+  let sink ← SliceSink.new
+  let (r, sink1) ← write_array_header sink 4#u64
+  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+  match cf with
+  | core.ops.control_flow.ControlFlow.Continue _ =>
+    let s ←
+      lift (Array.to_slice
+        (Array.make 10#usize [
+          83#u8, 105#u8, 103#u8, 110#u8, 97#u8, 116#u8, 117#u8, 114#u8, 101#u8,
+          49#u8
+          ]))
+    let (r1, sink2) ← write_text sink1 s
+    let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r1
+    match cf1 with
+    | core.ops.control_flow.ControlFlow.Continue _ =>
+      let (r2, sink3) ← write_bstr sink2 protected1
+      let cf2 ← core.result.Result.Insts.CoreOpsTry.branch r2
+      match cf2 with
+      | core.ops.control_flow.ControlFlow.Continue _ =>
+        match typ with
+        | Typ.License =>
+          let s1 ←
+            lift (Array.to_slice
+              (Array.make 16#usize [
+                107#u8, 110#u8, 116#u8, 114#u8, 108#u8, 47#u8, 108#u8, 105#u8,
+                99#u8, 101#u8, 110#u8, 115#u8, 101#u8, 47#u8, 118#u8, 49#u8
+                ]))
+          let (r3, sink4) ← write_bstr sink3 s1
+          let cf3 ← core.result.Result.Insts.CoreOpsTry.branch r3
+          match cf3 with
+          | core.ops.control_flow.ControlFlow.Continue _ =>
+            let (r4, sink5) ← write_bstr sink4 payload
+            let cf4 ← core.result.Result.Insts.CoreOpsTry.branch r4
+            match cf4 with
+            | core.ops.control_flow.ControlFlow.Continue _ =>
+              let written_len ← SliceSink.impl.len sink5
+              if written_len > MAX_MESSAGE_LEN
+              then
+                ok (core.result.Result.Err (CoseError.Codec
+                  CodecError.BufferTooSmall))
+              else
+                ok (core.result.Result.Ok
+                  { buf := sink5.buf, len := written_len })
+            | core.ops.control_flow.ControlFlow.Break residual =>
+              core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+                SigStructure CoseError.Insts.CoreConvertFromCodecError residual
+          | core.ops.control_flow.ControlFlow.Break residual =>
+            core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+              SigStructure CoseError.Insts.CoreConvertFromCodecError residual
+        | Typ.Enroll =>
+          let s1 ←
+            lift (Array.to_slice
+              (Array.make 15#usize [
+                107#u8, 110#u8, 116#u8, 114#u8, 108#u8, 47#u8, 101#u8, 110#u8,
+                114#u8, 111#u8, 108#u8, 108#u8, 47#u8, 118#u8, 49#u8
+                ]))
+          let (r3, sink4) ← write_bstr sink3 s1
+          let cf3 ← core.result.Result.Insts.CoreOpsTry.branch r3
+          match cf3 with
+          | core.ops.control_flow.ControlFlow.Continue _ =>
+            let (r4, sink5) ← write_bstr sink4 payload
+            let cf4 ← core.result.Result.Insts.CoreOpsTry.branch r4
+            match cf4 with
+            | core.ops.control_flow.ControlFlow.Continue _ =>
+              let written_len ← SliceSink.impl.len sink5
+              if written_len > MAX_MESSAGE_LEN
+              then
+                ok (core.result.Result.Err (CoseError.Codec
+                  CodecError.BufferTooSmall))
+              else
+                ok (core.result.Result.Ok
+                  { buf := sink5.buf, len := written_len })
+            | core.ops.control_flow.ControlFlow.Break residual =>
+              core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+                SigStructure CoseError.Insts.CoreConvertFromCodecError residual
+          | core.ops.control_flow.ControlFlow.Break residual =>
+            core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+              SigStructure CoseError.Insts.CoreConvertFromCodecError residual
+        | Typ.Revoke =>
+          let s1 ←
+            lift (Array.to_slice
+              (Array.make 15#usize [
+                107#u8, 110#u8, 116#u8, 114#u8, 108#u8, 47#u8, 114#u8, 101#u8,
+                118#u8, 111#u8, 107#u8, 101#u8, 47#u8, 118#u8, 49#u8
+                ]))
+          let (r3, sink4) ← write_bstr sink3 s1
+          let cf3 ← core.result.Result.Insts.CoreOpsTry.branch r3
+          match cf3 with
+          | core.ops.control_flow.ControlFlow.Continue _ =>
+            let (r4, sink5) ← write_bstr sink4 payload
+            let cf4 ← core.result.Result.Insts.CoreOpsTry.branch r4
+            match cf4 with
+            | core.ops.control_flow.ControlFlow.Continue _ =>
+              let written_len ← SliceSink.impl.len sink5
+              if written_len > MAX_MESSAGE_LEN
+              then
+                ok (core.result.Result.Err (CoseError.Codec
+                  CodecError.BufferTooSmall))
+              else
+                ok (core.result.Result.Ok
+                  { buf := sink5.buf, len := written_len })
+            | core.ops.control_flow.ControlFlow.Break residual =>
+              core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+                SigStructure CoseError.Insts.CoreConvertFromCodecError residual
+          | core.ops.control_flow.ControlFlow.Break residual =>
+            core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+              SigStructure CoseError.Insts.CoreConvertFromCodecError residual
+        | Typ.TrustUpdate =>
+          let s1 ←
+            lift (Array.to_slice
+              (Array.make 21#usize [
+                107#u8, 110#u8, 116#u8, 114#u8, 108#u8, 47#u8, 116#u8, 114#u8,
+                117#u8, 115#u8, 116#u8, 45#u8, 117#u8, 112#u8, 100#u8, 97#u8,
+                116#u8, 101#u8, 47#u8, 118#u8, 49#u8
+                ]))
+          let (r3, sink4) ← write_bstr sink3 s1
+          let cf3 ← core.result.Result.Insts.CoreOpsTry.branch r3
+          match cf3 with
+          | core.ops.control_flow.ControlFlow.Continue _ =>
+            let (r4, sink5) ← write_bstr sink4 payload
+            let cf4 ← core.result.Result.Insts.CoreOpsTry.branch r4
+            match cf4 with
+            | core.ops.control_flow.ControlFlow.Continue _ =>
+              let written_len ← SliceSink.impl.len sink5
+              if written_len > MAX_MESSAGE_LEN
+              then
+                ok (core.result.Result.Err (CoseError.Codec
+                  CodecError.BufferTooSmall))
+              else
+                ok (core.result.Result.Ok
+                  { buf := sink5.buf, len := written_len })
+            | core.ops.control_flow.ControlFlow.Break residual =>
+              core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+                SigStructure CoseError.Insts.CoreConvertFromCodecError residual
+          | core.ops.control_flow.ControlFlow.Break residual =>
+            core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+              SigStructure CoseError.Insts.CoreConvertFromCodecError residual
+      | core.ops.control_flow.ControlFlow.Break residual =>
+        core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+          SigStructure CoseError.Insts.CoreConvertFromCodecError residual
+    | core.ops.control_flow.ControlFlow.Break residual =>
+      core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+        SigStructure CoseError.Insts.CoreConvertFromCodecError residual
+  | core.ops.control_flow.ControlFlow.Break residual =>
+    core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+      SigStructure CoseError.Insts.CoreConvertFromCodecError residual
 
 end cbor_nopanic
