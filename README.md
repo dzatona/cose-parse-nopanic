@@ -6,8 +6,18 @@ RFC 8949 deterministic CBOR decoder (the layer under `COSE_Sign1`).
 Not the KNTRL product tree. Not a Runtime Verification repository.
 Work and name: Dmitrii Zatona.
 
-Toolchain (to match the Binder spike): Charon, Aeneas, Lean 4.
+**Proved:** for every `&[u8]`, `read_uint` returns Aeneas `ok _` (a decoded
+`u64` or a normal `CodecError`); it does not panic. Not RFC 8949 correctness.
 
-***REMOVED***
+Reports: [`reports/PROOF.md`](reports/PROOF.md),
+[`reports/EXTRACT.md`](reports/EXTRACT.md), [`reports/TOOLCHAIN.md`](reports/TOOLCHAIN.md).
 
-Status: spec written. Step 1 not started (`read_uint` / `read_head`, loop-free).
+## Reproduce
+
+```sh
+cd rust && cargo test
+# Charon 909ff09a / Aeneas c2015b86 / Lean 4.31.0 — see reports/TOOLCHAIN.md
+charon cargo --preset=aeneas --dest-file ../llbc/cbor_nopanic.llbc
+aeneas -backend lean -dest ../lean ../llbc/cbor_nopanic.llbc
+cd ../lean && lake build
+```
