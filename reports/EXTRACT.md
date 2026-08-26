@@ -281,3 +281,152 @@ for the same unused slice-`fmt` reason as `Reader`.
 `Typ` meaning, payload decode, encoder. Unused `CoseError` variants
 (`MalformedProtectedHeader`, `UnsupportedAlgorithm`, `UnknownTyp`,
 `SignatureInvalid`, `InvalidPublicKey`, `InvalidSigningKey`).
+
+---
+
+# EXTRACT — `decode_protected_header` path (layer 4)
+
+Same CBOR source files and provenance hashes as the layer-1 table above, plus
+`kntrl-license-core/src/cose/mod.rs` (hashed in layer 3) and
+`kntrl-license-core/src/types.rs` (hashed below). Destination is still
+`rust/src/lib.rs`.
+
+## Provenance (layer 4)
+
+Local checkout: `/Users/dzatona/Sites/MacExchange/kntrl-org/api-kntrl-org`  
+HEAD: `206ec5ecab0f579d538eac7897434d9a2f43f058`  
+Last commit touching `cose/mod.rs` / `types.rs` / `reader.rs`:
+`0a2f9a176ec041aaf38c4775473cd8e41406867a` `docs: fix rustdoc private and feature-gated links`
+
+| File | sha256 |
+|---|---|
+| `kntrl-license-core/src/cose/mod.rs` | `8abf884d28ee63c28ff5f85aba99e74cc662c52462741d180d9ca20a2e0a7a28` |
+| `kntrl-license-core/src/types.rs` | `0abf46e07c4ed3f20345528d9d97d9f54877aaa76af77629a186d53cbaf8bad5` |
+| `kntrl-license-core/src/cbor/reader.rs` | `c5d35b4a66935b9acf3fcaa97d5cd14035eafe4f1b643110274e0814122f1b73` |
+| `kntrl-license-core/src/cbor/mod.rs` | `f4dd9ef0245f10d9bafe8afae7f08ac226657fe699861c34f30359b805f2462b` |
+| `kntrl-license-core/src/error.rs` | `74b96d0e2ae382184e7665576379cda6f234ecd6d03e5547118f39467ee64a13` |
+
+`Typ::from_u64` span (`types.rs` 47–55):
+
+```
+    pub const fn from_u64(value: u64) -> Result<Self, CodecError> {
+        match value {
+            1 => Ok(Self::License),
+            2 => Ok(Self::Enroll),
+            3 => Ok(Self::Revoke),
+            4 => Ok(Self::TrustUpdate),
+            _ => Err(CodecError::InvalidEnumValue),
+        }
+    }
+```
+
+Control-flow source of `decode_protected_header` is `cose/mod.rs` 95–122
+(quoted; read-only, not copied as a tree):
+
+```
+fn decode_protected_header(bytes: &[u8]) -> Result<([u8; 16], Typ), CoseError> {
+    let mut reader = Reader::new(bytes);
+    let count = reader.read_map_header()?;
+    if count != 3 {
+        return Err(CoseError::MalformedProtectedHeader);
+    }
+    let mut last_key = None;
+
+    let key = reader.next_map_key(&mut last_key)?;
+    if key != 1 {
+        return Err(CoseError::MalformedProtectedHeader);
+    }
+    reader.read_fixed_byte(ALG_EDDSA_BYTE).map_err(|_bad_alg| CoseError::UnsupportedAlgorithm)?;
+
+    let key = reader.next_map_key(&mut last_key)?;
+    if key != 4 {
+        return Err(CoseError::MalformedProtectedHeader);
+    }
+    let kid = reader.read_bstr_fixed::<16>()?;
+
+    let key = reader.next_map_key(&mut last_key)?;
+    if key != 100 {
+        return Err(CoseError::MalformedProtectedHeader);
+    }
+    let typ = Typ::from_u64(reader.read_uint()?).map_err(|_unknown| CoseError::UnknownTyp)?;
+
+    reader.finish()?;
+    Ok((kid, typ))
+}
+```
+
+Three `next_map_key` calls, not a `while` over the pair count. That unroll is
+source syntax and the one allowed remodel. No generic map walker and no
+`slice_validated_array`.
+
+Called from `COSE_Sign1` `verify` after the array-of-4 envelope and `finish`,
+before `build_sig_structure`. This crate does **not** compose envelope +
+header into `parse_sign1`.
+
+Public hostile-bytes wrapper (Binder `parse_one` shape):
+
+- `decode_protected_header(bytes: &[u8]) -> Result<([u8; 16], Typ), CoseError>`
+
+`read_bstr_fixed_16` / `read_fixed_byte` / `next_map_key` stay methods on
+`Reader`. `Typ::from_u64` is the source match `1..=4` only. Other enums
+(`AUD`, `VER`, `EntitlementState`, …) are not extracted.
+
+No `while` / `for` / recursion on input length. Pair count is checked
+`== 3` then three straight-line reads.
+
+## Line map (layer 4)
+
+| Source | Crate (`rust/src/lib.rs`) | Notes |
+|---|---|---|
+| `error.rs` 47 `NonCanonicalKeyOrder` | `CodecError::NonCanonicalKeyOrder` | variant kept; appended |
+| `error.rs` 58 `InvalidEnumValue` | `CodecError::InvalidEnumValue` | variant kept; produced by `Typ::from_u64` |
+| `error.rs` 88 `MalformedProtectedHeader` | `CoseError::MalformedProtectedHeader` | variant kept; appended |
+| `error.rs` 94 `UnsupportedAlgorithm` | `CoseError::UnsupportedAlgorithm` | variant kept; appended |
+| `error.rs` 97 `UnknownTyp` | `CoseError::UnknownTyp` | variant kept; appended |
+| `mod.rs` 45 `MAJOR_NEGATIVE` | `MAJOR_NEGATIVE` | body identical (`0x20`) |
+| `mod.rs` 61 `ALG_EDDSA_BYTE` | `ALG_EDDSA_BYTE` | body identical (`MAJOR_NEGATIVE \| 0x07` = `0x27`) |
+| `types.rs` 19–28 `Typ` | `Typ` | four variants; `Hash` dropped |
+| `types.rs` 47–55 `Typ::from_u64` | `Typ::from_u64` | body identical (`1..=4` / `InvalidEnumValue`) |
+| `reader.rs` 194–197 `read_fixed_byte` | `Reader::read_fixed_byte` | same expected-byte check; see REMODEL |
+| `reader.rs` 209–218 `next_map_key` | `Reader::next_map_key` | same strictly-ascending check; see REMODEL |
+| `reader.rs` 149–152 `read_bstr_fixed::<16>` | `Reader::read_bstr_fixed_16` | monomorphized N=16; `take` then `try_from` |
+| `cose/mod.rs` 95–122 | `decode_protected_header` | public; three `next_map_key`; see REMODEL |
+
+## Intentional diffs (`// EXTRACT:`)
+
+| Crate | Why |
+|---|---|
+| `decode_protected_header` is `pub` | source is crate-private; theorem needs a `&[u8]` entry point |
+| `read_bstr_fixed_16` instead of `read_bstr_fixed::<N>` | only kid width 16 is on this path |
+| `Typ` without `Hash` / `to_u64` / other enums | path only needs `from_u64` |
+| New `CoseError` variants without dalek ones | path cannot produce `SignatureInvalid` / key errors |
+| No `parse_sign1` composition | envelope + header stay separate until after layer 5 |
+
+Source `decode_protected_header` turns `read_fixed_byte` failure into
+`UnsupportedAlgorithm` (including a truncated alg byte) and
+`Typ::from_u64` `InvalidEnumValue` into `UnknownTyp`. This crate does the
+same via `match` instead of `map_err`. `next_map_key` `NonCanonicalKeyOrder`
+and `read_bstr_fixed_16` / `finish` failures wrap as `CoseError::Codec`
+via `From`. Truncated kid body stays inner `CodecError::UnexpectedEnd`
+(not `WrongLength`).
+
+## Remodel (`// REMODEL:`)
+
+| Source | Remodel | Error change |
+|---|---|---|
+| `take(1)?.first().copied().ok_or(UnexpectedEnd)` in `read_fixed_byte` | `get_u8(take(1)?, 0)?` | **none** — same bounds check as layer 1 |
+| `if let Some(last) = *last_key && key <= last` | nested `if let` / `if` | **none** — same strictly-ascending predicate |
+| `read_fixed_byte(...).map_err(\|_bad_alg\| UnsupportedAlgorithm)` | `match` → `UnsupportedAlgorithm` on `Err(_)` | **none** — still maps every `read_fixed_byte` error |
+| `Typ::from_u64(...).map_err(\|_unknown\| UnknownTyp)` | `match` → `UnknownTyp` on `Err(_)` | **none** — still maps `InvalidEnumValue` |
+| `<[u8; 16]>::try_from(bytes).map_err(...)` | `match` `try_from` | **none** — same WrongLength; take-then-try_from |
+
+The unroll of three `next_map_key` calls is source syntax, not a second
+remodel. No `MAX_MESSAGE_LEN` cap. No generic map walker.
+
+## Not extracted (after layer 4)
+
+`slice_validated_array`, `verify`, `parse_sign1`, `Sig_structure` /
+`Sink` / `SliceSink` / `write_*` / `external_aad`, unions, `MaybeUninit`,
+raw pointer casts, ed25519, KNTRL `Typ` meaning, payload decode, encoder.
+Unused `CoseError` variants (`SignatureInvalid`, `InvalidPublicKey`,
+`InvalidSigningKey`).
