@@ -1,5 +1,7 @@
 /target
+/rust/target
 **/.lake
+/lean/.lake
 /lean/build
 *.swp
 .DS_Store
