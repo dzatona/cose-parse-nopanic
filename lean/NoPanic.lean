@@ -543,13 +543,177 @@ theorem read_sign1_envelope_no_panic (buf : Slice U8) :
                 | Continue _ =>
                   exact AlwaysOk.of_ok _
 
+theorem try_from_array_16_no_panic (val : Slice U8) :
+    AlwaysOk (core.array.TryFromArrayCopySlice.try_from 16#usize core.marker.CopyU8 val) := by
+  unfold core.array.TryFromArrayCopySlice.try_from
+  split <;> exact ⟨_, rfl⟩
+
+theorem Reader_read_bstr_fixed_16_no_panic (self : Reader) :
+    AlwaysOk (Reader.read_bstr_fixed_16 self) := by
+  unfold Reader.read_bstr_fixed_16
+  apply AlwaysOk.bind (Reader_read_bstr_no_panic self)
+  intro pair
+  rcases pair with ⟨r, self1⟩
+  apply AlwaysOk.bind (branch_no_panic r)
+  intro cf
+  cases cf with
+  | Break residual =>
+    apply AlwaysOk.bind (from_residual_no_panic (T := Array U8 16#usize) residual)
+    intro r1
+    exact AlwaysOk.of_ok _
+  | Continue val =>
+    apply AlwaysOk.bind (try_from_array_16_no_panic val)
+    intro r1
+    cases r1 <;> exact AlwaysOk.of_ok _
+
+theorem Typ_from_u64_no_panic (value : U64) : AlwaysOk (Typ.from_u64 value) := by
+  unfold Typ.from_u64
+  split <;> exact AlwaysOk.of_ok _
+
+theorem Reader_read_fixed_byte_no_panic (self : Reader) (expected : U8) :
+    AlwaysOk (Reader.read_fixed_byte self expected) := by
+  unfold Reader.read_fixed_byte
+  apply AlwaysOk.bind (take_no_panic self (1#usize))
+  intro pair
+  rcases pair with ⟨r, self1⟩
+  apply AlwaysOk.bind (branch_no_panic r)
+  intro cf
+  cases cf with
+  | Break residual =>
+    apply AlwaysOk.bind (from_residual_no_panic (T := Unit) residual)
+    intro r1
+    exact AlwaysOk.of_ok _
+  | Continue val =>
+    apply AlwaysOk.bind (get_u8_no_panic val (0#usize))
+    intro r1
+    apply AlwaysOk.bind (branch_no_panic r1)
+    intro cf1
+    cases cf1 with
+    | Break residual =>
+      apply AlwaysOk.bind (from_residual_no_panic (T := Unit) residual)
+      intro r2
+      exact AlwaysOk.of_ok _
+    | Continue val1 =>
+      apply AlwaysOk.ite <;> exact AlwaysOk.of_ok _
+
+theorem Reader_next_map_key_no_panic (self : Reader) (last_key : Option U64) :
+    AlwaysOk (Reader.next_map_key self last_key) := by
+  unfold Reader.next_map_key
+  apply AlwaysOk.bind (Reader_read_uint_no_panic self)
+  intro pair
+  rcases pair with ⟨r, self1⟩
+  apply AlwaysOk.bind (branch_no_panic r)
+  intro cf
+  cases cf with
+  | Break residual =>
+    apply AlwaysOk.bind (from_residual_no_panic (T := U64) residual)
+    intro r1
+    exact AlwaysOk.of_ok _
+  | Continue val =>
+    cases last_key with
+    | none => exact AlwaysOk.of_ok _
+    | some _ => apply AlwaysOk.ite <;> exact AlwaysOk.of_ok _
+
+/-- For every byte slice, `decode_protected_header` returns `ok _`
+    (`([u8; 16], Typ)` or `CoseError`). -/
+theorem decode_protected_header_no_panic (bytes : Slice U8) :
+    ∃ r, decode_protected_header bytes = ok r := by
+  unfold decode_protected_header
+  apply AlwaysOk.bind (new_no_panic bytes)
+  intro reader
+  apply AlwaysOk.bind (Reader_read_map_header_no_panic reader)
+  intro pair
+  rcases pair with ⟨r, reader1⟩
+  apply AlwaysOk.bind (branch_no_panic r)
+  intro cf
+  cases cf with
+  | Break residual =>
+    exact from_cose_residual_no_panic (T := (Array U8 16#usize) × Typ) residual
+  | Continue val =>
+    apply AlwaysOk.ite
+    · exact AlwaysOk.of_ok _
+    · apply AlwaysOk.bind (Reader_next_map_key_no_panic reader1 none)
+      intro pair1
+      rcases pair1 with ⟨r1, reader2, last_key⟩
+      apply AlwaysOk.bind (branch_no_panic r1)
+      intro cf1
+      cases cf1 with
+      | Break residual =>
+        exact from_cose_residual_no_panic (T := (Array U8 16#usize) × Typ) residual
+      | Continue val1 =>
+        apply AlwaysOk.ite
+        · exact AlwaysOk.of_ok _
+        · apply AlwaysOk.bind (Reader_read_fixed_byte_no_panic reader2 ALG_EDDSA_BYTE)
+          intro pair2
+          rcases pair2 with ⟨r2, reader3⟩
+          cases r2 with
+          | Err _ => exact AlwaysOk.of_ok _
+          | Ok _ =>
+            apply AlwaysOk.bind (Reader_next_map_key_no_panic reader3 last_key)
+            intro pair3
+            rcases pair3 with ⟨r3, reader4, last_key1⟩
+            apply AlwaysOk.bind (branch_no_panic r3)
+            intro cf2
+            cases cf2 with
+            | Break residual =>
+              exact from_cose_residual_no_panic (T := (Array U8 16#usize) × Typ) residual
+            | Continue val2 =>
+              apply AlwaysOk.ite
+              · exact AlwaysOk.of_ok _
+              · apply AlwaysOk.bind (Reader_read_bstr_fixed_16_no_panic reader4)
+                intro pair4
+                rcases pair4 with ⟨r4, reader5⟩
+                apply AlwaysOk.bind (branch_no_panic r4)
+                intro cf3
+                cases cf3 with
+                | Break residual =>
+                  exact from_cose_residual_no_panic (T := (Array U8 16#usize) × Typ) residual
+                | Continue val3 =>
+                  apply AlwaysOk.bind (Reader_next_map_key_no_panic reader5 last_key1)
+                  intro pair5
+                  rcases pair5 with ⟨r5, reader6, _⟩
+                  apply AlwaysOk.bind (branch_no_panic r5)
+                  intro cf4
+                  cases cf4 with
+                  | Break residual =>
+                    exact from_cose_residual_no_panic (T := (Array U8 16#usize) × Typ) residual
+                  | Continue val4 =>
+                    apply AlwaysOk.ite
+                    · exact AlwaysOk.of_ok _
+                    · apply AlwaysOk.bind (Reader_read_uint_no_panic reader6)
+                      intro pair6
+                      rcases pair6 with ⟨r6, reader7⟩
+                      apply AlwaysOk.bind (branch_no_panic r6)
+                      intro cf5
+                      cases cf5 with
+                      | Break residual =>
+                        exact from_cose_residual_no_panic
+                          (T := (Array U8 16#usize) × Typ) residual
+                      | Continue val5 =>
+                        apply AlwaysOk.bind (Typ_from_u64_no_panic val5)
+                        intro r7
+                        cases r7 with
+                        | Err _ => exact AlwaysOk.of_ok _
+                        | Ok _ =>
+                          apply AlwaysOk.bind (finish_no_panic reader7)
+                          intro r8
+                          apply AlwaysOk.bind (branch_no_panic r8)
+                          intro cf6
+                          cases cf6 with
+                          | Break residual =>
+                            exact from_cose_residual_no_panic
+                              (T := (Array U8 16#usize) × Typ) residual
+                          | Continue _ =>
+                            exact AlwaysOk.of_ok _
+
 -- Expected: propext, Classical.choice, Quot.sound. See reports/PROOF.md,
--- reports/PROOF-bstr.md, and reports/PROOF-envelope.md.
+-- reports/PROOF-bstr.md, reports/PROOF-envelope.md, and reports/PROOF-header.md.
 #print axioms read_uint_no_panic
 #print axioms read_bstr_no_panic
 #print axioms read_bstr_fixed_64_no_panic
 #print axioms read_array_header_no_panic
 #print axioms read_map_header_no_panic
 #print axioms read_sign1_envelope_no_panic
+#print axioms decode_protected_header_no_panic
 
 end NoPanic
