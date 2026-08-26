@@ -8,6 +8,38 @@ Source of truth (read-only, not copied as a tree):
 
 Destination: `rust/src/lib.rs` (single-file crate).
 
+## Provenance
+
+Local checkout: `/Users/dzatona/Sites/MacExchange/kntrl-org/api-kntrl-org`  
+HEAD: `206ec5ecab0f579d538eac7897434d9a2f43f058`  
+Last commit touching the three files:
+`764a0ee8438dfd13001d295c6e4539c74089404f` `feat(license-core): add COSE/Ed25519 wire core`
+
+| File | sha256 |
+|---|---|
+| `kntrl-license-core/src/cbor/reader.rs` | `c5d35b4a66935b9acf3fcaa97d5cd14035eafe4f1b643110274e0814122f1b73` |
+| `kntrl-license-core/src/cbor/mod.rs` | `f4dd9ef0245f10d9bafe8afae7f08ac226657fe699861c34f30359b805f2462b` |
+| `kntrl-license-core/src/error.rs` | `74b96d0e2ae382184e7665576379cda6f234ecd6d03e5547118f39467ee64a13` |
+
+## Called from `COSE_Sign1` verify ()
+
+Path: `verify` → `decode_protected_header` → `read_map_header` / `next_map_key` → `read_uint`.
+
+Call sites only (no extra code):
+
+- `kntrl-license-core/src/cose/mod.rs:221` `verify`
+- `kntrl-license-core/src/cose/mod.rs:236` `decode_protected_header(protected)`
+- `kntrl-license-core/src/cose/mod.rs:95` `decode_protected_header`
+- `kntrl-license-core/src/cose/mod.rs:97` `reader.read_map_header()`
+- `kntrl-license-core/src/cose/mod.rs:103`, `:109`, `:115` `reader.next_map_key(...)`
+- `kntrl-license-core/src/cose/mod.rs:119` `reader.read_uint()` (typ)
+- `kntrl-license-core/src/cbor/reader.rs:181` `read_map_header`
+- `kntrl-license-core/src/cbor/reader.rs:209` `next_map_key`
+- `kntrl-license-core/src/cbor/reader.rs:210` `self.read_uint()`
+- `kntrl-license-core/src/cbor/reader.rs:126` `read_uint`
+
+`read_map_header` uses `read_head` with the map major type. The unsigned-integer decoder is `next_map_key` → `read_uint`, and also the direct `read_uint` at `decode_protected_header:119`.
+
 Chosen path: `Reader::take` + `Reader::read_head` + `Reader::read_uint`, plus a
 public `&[u8]` wrapper `read_uint` so the theorem is a function of hostile bytes
 (Binder `parse_one` shape). No `while` / `for` / recursion on input length.
