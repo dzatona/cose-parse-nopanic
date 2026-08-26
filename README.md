@@ -8,7 +8,9 @@ Work and name: Dmitrii Zatona.
 
 **Proved:** for every `&[u8]`, `read_uint` returns Aeneas `ok _` (a decoded
 `u64` or a normal `CodecError`); it does not panic. Not RFC 8949 correctness.
-**Goal:** `verify_no_panic` on `COSE_Sign1::verify`; current proof is still step 1.
+**Goal:** `parse_sign1_no_panic` — no-panic of the COSE_Sign1 envelope
+parse (array4 + bstrs + protected map + `Sig_structure` into `[u8; 4096]`).
+Signature / Ed25519 is not proved. Current proof is still layer 1 `read_uint`.
 
 Reports: [`reports/PROOF.md`](reports/PROOF.md),
 [`reports/EXTRACT.md`](reports/EXTRACT.md), [`reports/TOOLCHAIN.md`](reports/TOOLCHAIN.md).
