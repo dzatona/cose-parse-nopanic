@@ -430,3 +430,125 @@ remodel. No `MAX_MESSAGE_LEN` cap. No generic map walker.
 raw pointer casts, ed25519, KNTRL `Typ` meaning, payload decode, encoder.
 Unused `CoseError` variants (`SignatureInvalid`, `InvalidPublicKey`,
 `InvalidSigningKey`).
+
+---
+
+# EXTRACT — `build_sig_structure` path (layer 5)
+
+Same CBOR source files and provenance hashes as the layer-1 table above, plus
+`kntrl-license-core/src/cose/mod.rs` (hashed in layer 3) and
+`kntrl-license-core/src/domain.rs` (hashed below). Destination is still
+`rust/src/lib.rs`.
+
+## Provenance (layer 5)
+
+Local checkout: `/Users/dzatona/Sites/MacExchange/kntrl-org/api-kntrl-org`  
+HEAD: `206ec5ecab0f579d538eac7897434d9a2f43f058`  
+Last commit touching `cose/mod.rs` / `cbor/mod.rs` / `domain.rs`:
+`0a2f9a176ec041aaf38c4775473cd8e41406867a` `docs: fix rustdoc private and feature-gated links`
+
+| File | sha256 |
+|---|---|
+| `kntrl-license-core/src/cose/mod.rs` | `8abf884d28ee63c28ff5f85aba99e74cc662c52462741d180d9ca20a2e0a7a28` |
+| `kntrl-license-core/src/cbor/mod.rs` | `f4dd9ef0245f10d9bafe8afae7f08ac226657fe699861c34f30359b805f2462b` |
+| `kntrl-license-core/src/domain.rs` | `e58047017e5c06463095794700d273a302d6197cdfcf041d0782c2a5d7dee059` |
+| `kntrl-license-core/src/error.rs` | `74b96d0e2ae382184e7665576379cda6f234ecd6d03e5547118f39467ee64a13` |
+
+Control-flow source of `build_sig_structure` is `cose/mod.rs` 134–149
+(quoted; read-only, not copied as a tree):
+
+```
+fn build_sig_structure<'buf>(
+    typ: Typ,
+    protected: &[u8],
+    payload: &[u8],
+    out: &'buf mut [u8],
+) -> Result<&'buf [u8], CoseError> {
+    let written_len = {
+        let mut sink = SliceSink::new(out);
+        write_array_header(&mut sink, 4)?;
+        write_text(&mut sink, "Signature1")?;
+        write_bstr(&mut sink, protected)?;
+        write_bstr(&mut sink, external_aad(typ))?;
+        write_bstr(&mut sink, payload)?;
+        sink.len()
+    };
+    out.get(..written_len).ok_or(CoseError::Codec(CodecError::BufferTooSmall))
+}
+```
+
+`external_aad` (`domain.rs` 24–30) is a match on `Typ` to four ASCII literals.
+Product meaning of each token is outside the no-panic claim.
+
+Called from `COSE_Sign1` `verify` after `decode_protected_header`, before dalek.
+This crate does **not** compose envelope + header + sig-structure into
+`parse_sign1`.
+
+Public entry point (Binder `parse_one` shape, Binder trap buffer-by-value):
+
+- `build_sig_structure(typ, protected, payload) -> Result<SigStructure, CoseError>`
+
+`SigStructure` owns `[u8; MAX_MESSAGE_LEN]` plus the written length. Source
+takes `out: &mut [u8]` and returns a prefix slice.
+
+No `while` / `for` / recursion on input length. `copy_from_slice` is the
+Aeneas stdlib primitive (`ok src` iff dest/src lengths equal, else `fail`),
+not a loop. The allowed remodel puts that copy behind `dest.len() != bytes.len()`
+→ `BufferTooSmall`.
+
+A cap of each input bstr at 4096 does **not** imply the encoded structure
+fits (headers + `"Signature1"` + aad + both bstrs). Source already returns
+`BufferTooSmall`; the theorem treats that as `ok(Err)`.
+
+## Line map (layer 5)
+
+| Source | Crate (`rust/src/lib.rs`) | Notes |
+|---|---|---|
+| `error.rs` 22 `BufferTooSmall` | `CodecError::BufferTooSmall` | variant kept; appended |
+| `cose/mod.rs` 46 `MAX_MESSAGE_LEN` | `MAX_MESSAGE_LEN` | body identical (`4096`) |
+| `mod.rs` 49 `MAJOR_TEXT` | `MAJOR_TEXT` | body identical (`0x60`) |
+| `domain.rs` 13–19 `AAD_*` | `AAD_LICENSE` / `AAD_ENROLL` / `AAD_REVOKE` / `AAD_TRUST_UPDATE` | body identical |
+| `domain.rs` 24–30 `external_aad` | `external_aad` | body identical (match only) |
+| `mod.rs` 85–88 `SliceSink` fields | `SliceSink` | owned `[u8; 4096]` instead of `&mut [u8]`; see EXTRACT |
+| `mod.rs` 117–123 `write_bytes` | `SliceSink::write_bytes` | same `checked_add` + `get_mut` + copy; see REMODEL |
+| `mod.rs` 138–166 `write_head` | `write_head` | same smallest-form branches; see REMODEL |
+| `mod.rs` 181–186 `write_bstr` | `write_bstr` | concrete `SliceSink`; see REMODEL |
+| `mod.rs` 193–199 `write_text` | `write_text` | takes `&[u8]`; only `"Signature1"` |
+| `mod.rs` 207–209 `write_array_header` | `write_array_header` | body identical (`write_head(MAJOR_ARRAY, len)`) |
+| `cose/mod.rs` 134–149 | `build_sig_structure` | public; returns owned `SigStructure` |
+
+## Intentional diffs (`// EXTRACT:`)
+
+| Crate | Why |
+|---|---|
+| No `Sink` trait / no `Vec` sink | Charon/Aeneas choke on the trait; only `SliceSink` is on verify |
+| `SliceSink` owns `[u8; 4096]` | Binder trap: Binder closed `FnOnce` + `&mut [u8; N]` with buffer-by-value |
+| `build_sig_structure` does not take `out: &mut [u8]` | same Binder trap close; returns `SigStructure` |
+| `write_*` take `&mut SliceSink`, not `impl Sink` | concrete sink only |
+| `write_text` takes `&[u8]` | source `&str` / `as_bytes` was an unknown-external axiom |
+| AAD written as byte literals in `build_sig_structure` | same match as `external_aad`; avoids `'static` global + `&mut` sink |
+| `external_aad` / `AAD_*` still present | match-only public API; tests compare encodings |
+| No `parse_sign1` composition | finale after this layer |
+
+## Remodel (`// REMODEL:`)
+
+| Source | Remodel | Error change |
+|---|---|---|
+| `x.ok_or(BufferTooSmall)?` | `match` → `BufferTooSmall` | **none** |
+| `dest.copy_from_slice(bytes)` unconstrained | `if dest.len() != bytes.len() { BufferTooSmall }` then copy | **none** on the verify path — lengths already match after `get_mut(len..len+n)` |
+| `u8::try_from(arg)` / `uN::try_from(arg).is_ok()` | `arg < 24` / `arg <= u64::from(uN::MAX)` | **none** — same bounds as layer 1 |
+| 2/4/8-byte `copy_from_slice` in `write_head` | unrolled `be_byte` into a stack array | **none** |
+| `u64::try_from(bytes.len())` | `bytes.len() as u64` | LengthOverflow cannot fire; `usize` fits in `u64` |
+| `out.get(..written_len).ok_or(BufferTooSmall)` | `if written_len > MAX_MESSAGE_LEN` | **none** — `len` only advances after a successful `get_mut` |
+
+Aeneas did **not** lower `copy_from_slice` to a loop. First extraction of
+borrowed `&mut [u8; 4096]` failed (see `reports/AENEAS.md`); the owned-array
+remodel is the one allowed Binder trap close. No second copy remodel. No loop
+lemma. No `STOP.md`.
+
+## Not extracted (after layer 5)
+
+`slice_validated_array`, `verify`, `parse_sign1`, unions, `MaybeUninit`,
+raw pointer casts, ed25519 / dalek, KNTRL `Typ` meaning, payload decode.
+Unused `CoseError` variants (`SignatureInvalid`, `InvalidPublicKey`,
+`InvalidSigningKey`). The `Sink` trait and `Vec` sink.
