@@ -358,7 +358,75 @@ theorem read_uint_no_panic (buf : Slice U8) : ∃ r, read_uint buf = ok r := by
   rcases pair with ⟨r, _⟩
   exact AlwaysOk.of_ok r
 
--- Expected: propext, Classical.choice, Quot.sound. See reports/PROOF.md.
+theorem try_from_array_64_no_panic (val : Slice U8) :
+    AlwaysOk (core.array.TryFromArrayCopySlice.try_from 64#usize core.marker.CopyU8 val) := by
+  unfold core.array.TryFromArrayCopySlice.try_from
+  split <;> exact ⟨_, rfl⟩
+
+theorem Reader_read_bstr_no_panic (self : Reader) : AlwaysOk (Reader.read_bstr self) := by
+  unfold Reader.read_bstr
+  apply AlwaysOk.bind (read_head_no_panic self MAJOR_BSTR)
+  intro pair
+  rcases pair with ⟨r, self1⟩
+  apply AlwaysOk.bind (branch_no_panic r)
+  intro cf
+  cases cf with
+  | Break residual =>
+    apply AlwaysOk.bind (from_residual_no_panic (T := Slice U8) residual)
+    intro r1
+    exact AlwaysOk.of_ok _
+  | Continue val =>
+    apply AlwaysOk.bind (AlwaysOk.of_lift (UScalar.cast .U64 core.num.Usize.MAX))
+    intro i
+    apply AlwaysOk.ite
+    · exact AlwaysOk.of_ok _
+    · apply AlwaysOk.bind (AlwaysOk.of_lift (UScalar.cast .Usize val))
+      intro len
+      exact take_no_panic self1 len
+
+/-- For every byte slice, `read_bstr` returns `ok _` (a slice or `CodecError`). -/
+theorem read_bstr_no_panic (buf : Slice U8) : ∃ r, read_bstr buf = ok r := by
+  unfold read_bstr
+  apply AlwaysOk.bind (new_no_panic buf)
+  intro reader
+  apply AlwaysOk.bind (Reader_read_bstr_no_panic reader)
+  intro pair
+  rcases pair with ⟨r, _⟩
+  exact AlwaysOk.of_ok r
+
+theorem Reader_read_bstr_fixed_64_no_panic (self : Reader) :
+    AlwaysOk (Reader.read_bstr_fixed_64 self) := by
+  unfold Reader.read_bstr_fixed_64
+  apply AlwaysOk.bind (Reader_read_bstr_no_panic self)
+  intro pair
+  rcases pair with ⟨r, self1⟩
+  apply AlwaysOk.bind (branch_no_panic r)
+  intro cf
+  cases cf with
+  | Break residual =>
+    apply AlwaysOk.bind (from_residual_no_panic (T := Array U8 64#usize) residual)
+    intro r1
+    exact AlwaysOk.of_ok _
+  | Continue val =>
+    apply AlwaysOk.bind (try_from_array_64_no_panic val)
+    intro r1
+    cases r1 <;> exact AlwaysOk.of_ok _
+
+/-- For every byte slice, `read_bstr_fixed_64` returns `ok _` (64 bytes or `CodecError`). -/
+theorem read_bstr_fixed_64_no_panic (buf : Slice U8) :
+    ∃ r, read_bstr_fixed_64 buf = ok r := by
+  unfold read_bstr_fixed_64
+  apply AlwaysOk.bind (new_no_panic buf)
+  intro reader
+  apply AlwaysOk.bind (Reader_read_bstr_fixed_64_no_panic reader)
+  intro pair
+  rcases pair with ⟨r, _⟩
+  exact AlwaysOk.of_ok r
+
+-- Expected: propext, Classical.choice, Quot.sound. See reports/PROOF.md and
+-- reports/PROOF-bstr.md.
 #print axioms read_uint_no_panic
+#print axioms read_bstr_no_panic
+#print axioms read_bstr_fixed_64_no_panic
 
 end NoPanic
