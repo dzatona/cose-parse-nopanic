@@ -2,9 +2,12 @@
 //! no-panic claims.
 //!
 //! [`take`], [`Reader::read_head`], [`Reader::read_uint`], [`Reader::read_bstr`],
-//! and [`Reader::read_bstr_fixed_64`] are copied from `kntrl-license-core`
-//! `cbor/reader.rs`. Every line that is not a verbatim copy of that path is
-//! marked `// EXTRACT:` or `// REMODEL:`.
+//! [`Reader::read_bstr_fixed_64`], [`Reader::read_array_header`],
+//! [`Reader::read_map_header`], and [`Reader::finish`] are copied from
+//! `kntrl-license-core` `cbor/reader.rs`. [`read_sign1_envelope`] composes the
+//! `COSE_Sign1` array-of-4 prefix of `verify` and stops before protected-header
+//! decode. Every line that is not a verbatim copy of that path is marked
+//! `// EXTRACT:` or `// REMODEL:`.
 
 // EXTRACT: standalone crate is `no_std` and allocator-free; the source crate
 // is also `no_std` by default, but this file does not pull the rest of it.
@@ -35,12 +38,28 @@ pub enum CodecError {
     LengthOverflow,
     /// A fixed-length byte string had the wrong length.
     WrongLength,
+    /// Extra bytes remain after a complete self-delimiting item.
+    TrailingBytes,
+    /// The envelope is not a definite-length 4-element array.
+    ///
+    /// EXTRACT: source is `CoseError::MalformedEnvelope`. `CoseError` is not
+    /// extracted yet; this crate stays on [`CodecError`].
+    MalformedEnvelope,
+    /// The unprotected header is not the empty map.
+    ///
+    /// EXTRACT: source is `CoseError::NonEmptyUnprotectedHeader`. `CoseError`
+    /// is not extracted yet; this crate stays on [`CodecError`].
+    NonEmptyUnprotectedHeader,
 }
 
 /// Major type 0 (unsigned integer), pre-shifted into the top-3-bits position.
 const MAJOR_UNSIGNED: u8 = 0x00;
 /// Major type 2 (byte string), pre-shifted into the top-3-bits position.
 const MAJOR_BSTR: u8 = 0x40;
+/// Major type 4 (array), pre-shifted into the top-3-bits position.
+const MAJOR_ARRAY: u8 = 0x80;
+/// Major type 5 (map), pre-shifted into the top-3-bits position.
+const MAJOR_MAP: u8 = 0xA0;
 /// Mask selecting the major-type bits of a CBOR head byte.
 const MAJOR_MASK: u8 = 0xE0;
 /// Mask selecting the additional-info bits of a CBOR head byte.
@@ -62,6 +81,24 @@ impl<'a> Reader<'a> {
     #[must_use]
     pub const fn new(buf: &'a [u8]) -> Self {
         Self { buf, pos: 0 }
+    }
+
+    /// Returns `true` iff every byte of the input has been consumed.
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.pos == self.buf.len()
+    }
+
+    /// Confirms every byte of the input was consumed.
+    ///
+    /// # Errors
+    /// Returns [`CodecError::TrailingBytes`] if bytes remain.
+    pub const fn finish(&self) -> Result<(), CodecError> {
+        if self.is_empty() {
+            Ok(())
+        } else {
+            Err(CodecError::TrailingBytes)
+        }
     }
 
     /// Consumes and returns the next `n` bytes.
@@ -205,6 +242,22 @@ impl<'a> Reader<'a> {
             Err(_) => Err(CodecError::WrongLength),
         }
     }
+
+    /// Reads a canonical CBOR definite-length array header (major type 4).
+    ///
+    /// # Errors
+    /// As [`Reader::read_uint`] (for major type 4 instead of 0).
+    pub fn read_array_header(&mut self) -> Result<u64, CodecError> {
+        self.read_head(MAJOR_ARRAY)
+    }
+
+    /// Reads a canonical CBOR definite-length map header (major type 5).
+    ///
+    /// # Errors
+    /// As [`Reader::read_uint`] (for major type 5 instead of 0).
+    pub fn read_map_header(&mut self) -> Result<u64, CodecError> {
+        self.read_head(MAJOR_MAP)
+    }
 }
 
 /// Index `bytes[i]` as `Result`, never a panic.
@@ -256,9 +309,109 @@ pub fn read_bstr_fixed_64(buf: &[u8]) -> Result<[u8; 64], CodecError> {
     reader.read_bstr_fixed_64()
 }
 
+/// Reads a canonical CBOR definite-length array header from the start of `buf`.
+///
+/// # Errors
+/// As [`Reader::read_array_header`].
+// EXTRACT: public `&[u8]` entry point so the no-panic theorem is a function of
+// hostile bytes (Binder `parse_one` shape). Body is `Reader::new` + method.
+pub fn read_array_header(buf: &[u8]) -> Result<u64, CodecError> {
+    // EXTRACT: wrapper; source exposes only the method on `Reader`.
+    let mut reader = Reader::new(buf);
+    reader.read_array_header()
+}
+
+/// Reads a canonical CBOR definite-length map header from the start of `buf`.
+///
+/// # Errors
+/// As [`Reader::read_map_header`].
+// EXTRACT: public `&[u8]` entry point so the no-panic theorem is a function of
+// hostile bytes (Binder `parse_one` shape). Body is `Reader::new` + method.
+pub fn read_map_header(buf: &[u8]) -> Result<u64, CodecError> {
+    // EXTRACT: wrapper; source exposes only the method on `Reader`.
+    let mut reader = Reader::new(buf);
+    reader.read_map_header()
+}
+
+/// The four `COSE_Sign1` array slots, before protected-header decode.
+///
+/// EXTRACT: source `verify` keeps these as locals (`protected`, `payload`,
+/// `signature_bytes`) and then decodes the protected map. This type stops
+/// before that decode. `Debug`/`Clone`/`Copy` are omitted so Aeneas does not
+/// emit an unused slice `fmt` axiom.
+pub struct Envelope<'a> {
+    /// Raw protected-header byte string. Not a decoded map.
+    pub protected: &'a [u8],
+    /// Raw payload byte string. Not decoded.
+    pub payload: &'a [u8],
+    /// 64-byte signature slot. Not checked against a public key here.
+    pub signature: [u8; 64],
+}
+
+/// Reads the `COSE_Sign1` array-of-4 envelope skeleton.
+///
+/// Order matches source `verify` before protected-header decode: array header
+/// must be 4, then protected bstr, empty unprotected map, payload bstr,
+/// 64-byte signature bstr, then [`Reader::finish`].
+///
+/// # Errors
+/// Returns [`CodecError::MalformedEnvelope`] if the array count is not 4,
+/// [`CodecError::NonEmptyUnprotectedHeader`] if the unprotected map is not
+/// empty, [`CodecError::TrailingBytes`] if bytes remain after the signature,
+/// or the same [`CodecError`] variants as the bstr readers for truncated or
+/// non-canonical slots.
+// EXTRACT: `verify` lines that read the four array slots and `finish`, minus
+// `decode_protected_header`, `build_sig_structure`, and dalek. `CoseError`
+// variants for a bad count / nonempty unprotected map are mapped onto
+// [`CodecError`] until `CoseError` is extracted. Truncated-bstr errors are
+// unchanged (`UnexpectedEnd`, not `WrongLength`, on a short signature body).
+pub fn read_sign1_envelope(buf: &[u8]) -> Result<Envelope<'_>, CodecError> {
+    let mut reader = Reader::new(buf);
+    let count = reader.read_array_header()?;
+    if count != 4 {
+        return Err(CodecError::MalformedEnvelope);
+    }
+    let protected = reader.read_bstr()?;
+    let unprotected_count = reader.read_map_header()?;
+    if unprotected_count != 0 {
+        return Err(CodecError::NonEmptyUnprotectedHeader);
+    }
+    let payload = reader.read_bstr()?;
+    let signature = reader.read_bstr_fixed_64()?;
+    reader.finish()?;
+    Ok(Envelope {
+        protected,
+        payload,
+        signature,
+    })
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{read_bstr, read_bstr_fixed_64, read_uint, CodecError, Reader};
+    use super::{
+        read_array_header, read_bstr, read_bstr_fixed_64, read_map_header, read_sign1_envelope,
+        read_uint, CodecError, Reader,
+    };
+
+    /// Canonical 4-array: empty protected, empty unprotected map, empty payload,
+    /// 64-byte signature (all zeros).
+    fn minimal_sign1_bytes() -> [u8; 70] {
+        let mut bytes = [0_u8; 70];
+        bytes[0] = 0x84;
+        bytes[1] = 0x40;
+        bytes[2] = 0xA0;
+        bytes[3] = 0x40;
+        bytes[4] = 0x58;
+        bytes[5] = 64;
+        bytes
+    }
+
+    fn expect_envelope_err(buf: &[u8]) -> CodecError {
+        match read_sign1_envelope(buf) {
+            Ok(_) => panic!("expected envelope error"),
+            Err(e) => e,
+        }
+    }
 
     /// Canonical encodings of the smallest-form uint boundaries from the source
     /// `should_round_trip_uint_smallest_form_boundaries` test, written by hand
@@ -453,5 +606,103 @@ mod tests {
     fn should_reject_reserved_and_indefinite_bstr() {
         assert_eq!(read_bstr(&[0x5C]), Err(CodecError::DisallowedMajorType));
         assert_eq!(read_bstr(&[0x5F]), Err(CodecError::IndefiniteLength));
+    }
+
+    #[test]
+    fn should_decode_canonical_array_header_count_4() {
+        assert_eq!(read_array_header(&[0x84]), Ok(4));
+        let mut reader = Reader::new(&[0x84]);
+        let count = reader.read_array_header().expect("array-4 head must decode");
+        assert_eq!(count, 4);
+    }
+
+    #[test]
+    fn should_reject_non_canonical_array_header() {
+        // 1-byte length form of 4 (must be additional-info 4).
+        assert_eq!(
+            read_array_header(&[0x98, 0x04]),
+            Err(CodecError::NonCanonicalLength)
+        );
+    }
+
+    #[test]
+    fn should_reject_empty_array_header_input() {
+        assert_eq!(read_array_header(&[]), Err(CodecError::UnexpectedEnd));
+    }
+
+    #[test]
+    fn should_reject_major_type_not_array() {
+        assert_eq!(read_array_header(&[0x00]), Err(CodecError::TypeMismatch));
+        assert_eq!(read_array_header(&[0xA0]), Err(CodecError::TypeMismatch));
+    }
+
+    #[test]
+    fn should_reject_truncated_array_header() {
+        assert_eq!(read_array_header(&[0x98]), Err(CodecError::UnexpectedEnd));
+    }
+
+    #[test]
+    fn should_decode_empty_map_header() {
+        assert_eq!(read_map_header(&[0xA0]), Ok(0));
+        let mut reader = Reader::new(&[0xA0]);
+        let count = reader.read_map_header().expect("empty map head must decode");
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn should_decode_minimal_sign1_envelope() {
+        let bytes = minimal_sign1_bytes();
+        let envelope = read_sign1_envelope(&bytes).expect("minimal envelope must decode");
+        assert!(envelope.protected.is_empty());
+        assert!(envelope.payload.is_empty());
+        assert_eq!(envelope.signature, [0_u8; 64]);
+    }
+
+    #[test]
+    fn should_reject_sign1_trailing_bytes() {
+        let mut bytes = [0_u8; 71];
+        bytes[..70].copy_from_slice(&minimal_sign1_bytes());
+        bytes[70] = 0x00;
+        assert_eq!(expect_envelope_err(&bytes), CodecError::TrailingBytes);
+    }
+
+    #[test]
+    fn should_reject_sign1_count_not_4() {
+        assert_eq!(expect_envelope_err(&[0x80]), CodecError::MalformedEnvelope);
+        assert_eq!(
+            expect_envelope_err(&[0x83, 0x40, 0xA0, 0x40]),
+            CodecError::MalformedEnvelope
+        );
+        assert_eq!(expect_envelope_err(&[0x85]), CodecError::MalformedEnvelope);
+    }
+
+    #[test]
+    fn should_reject_sign1_nonempty_unprotected() {
+        let mut bytes = minimal_sign1_bytes();
+        bytes[2] = 0xA1;
+        assert_eq!(
+            expect_envelope_err(&bytes),
+            CodecError::NonEmptyUnprotectedHeader
+        );
+    }
+
+    #[test]
+    fn should_reject_truncated_sign1_slots() {
+        assert_eq!(expect_envelope_err(&[0x84]), CodecError::UnexpectedEnd);
+        assert_eq!(expect_envelope_err(&[0x84, 0x41]), CodecError::UnexpectedEnd);
+        assert_eq!(expect_envelope_err(&[0x84, 0x40]), CodecError::UnexpectedEnd);
+        assert_eq!(
+            expect_envelope_err(&[0x84, 0x40, 0xA0, 0x41]),
+            CodecError::UnexpectedEnd
+        );
+        // Header claims 64, body is short. Must stay UnexpectedEnd, not WrongLength.
+        let mut short_sig = [0_u8; 16];
+        short_sig[0] = 0x84;
+        short_sig[1] = 0x40;
+        short_sig[2] = 0xA0;
+        short_sig[3] = 0x40;
+        short_sig[4] = 0x58;
+        short_sig[5] = 64;
+        assert_eq!(expect_envelope_err(&short_sig), CodecError::UnexpectedEnd);
     }
 }

@@ -163,3 +163,76 @@ stays `Err`.
 `read_bstr_fixed::<16>` (kid), `next_map_key`, `slice_validated_array`,
 `verify`, `parse_sign1`, `Sig_structure`, unions, `MaybeUninit`, raw pointer
 casts, ed25519, KNTRL `Typ`, payload, encoder.
+
+---
+
+# EXTRACT — `read_sign1_envelope` path (layer 3)
+
+Same source files and provenance hashes as the layer-1 table above, plus
+`kntrl-license-core/src/cose/mod.rs` `verify` lines 221–234 for control flow
+only. Destination is still `rust/src/lib.rs`.
+
+Called from `COSE_Sign1` verify as the array-of-4 envelope skeleton, **before**
+`decode_protected_header` and `build_sig_structure`. Kid / Typ / protected-map
+contents are not extracted here.
+
+Public hostile-bytes wrappers (Binder `parse_one` shape):
+
+- `read_array_header(buf: &[u8]) -> Result<u64, CodecError>`
+- `read_map_header(buf: &[u8]) -> Result<u64, CodecError>`
+- `read_sign1_envelope(buf: &[u8]) -> Result<Envelope, CodecError>`
+
+`Envelope` holds `protected: &[u8]`, `payload: &[u8]`, `signature: [u8; 64]`.
+It is not a source type: source `verify` keeps those as locals and then
+decodes the protected map. This crate stops before that decode.
+
+Control flow is the source order, not a synthetic “array header + empty map +
+finish” without the bstrs:
+
+`read_array_header` == 4 → protected `read_bstr` → `read_map_header` == 0 →
+payload `read_bstr` → `read_bstr_fixed_64` → `finish`.
+
+No `while` / `for` / recursion on input length. `take(len)` is still the
+layer-1 `checked_add` + `slice::get`.
+
+## Line map (layer 3)
+
+| Source | Crate (`rust/src/lib.rs`) | Notes |
+|---|---|---|
+| `error.rs` 61–62 `TrailingBytes` | `CodecError::TrailingBytes` | variant kept; required by `finish` |
+| `error.rs` 84–85 `CoseError::MalformedEnvelope` | `CodecError::MalformedEnvelope` | EXTRACT: `CoseError` not pulled; same reject |
+| `error.rs` 90–91 `CoseError::NonEmptyUnprotectedHeader` | `CodecError::NonEmptyUnprotectedHeader` | EXTRACT: `CoseError` not pulled; same reject |
+| `mod.rs` 51 `MAJOR_ARRAY` | `MAJOR_ARRAY` | body identical (`0x80`) |
+| `mod.rs` 53 `MAJOR_MAP` | `MAJOR_MAP` | body identical (`0xA0`) |
+| `reader.rs` 30–32 `is_empty` | `Reader::is_empty` | body identical (`pos == buf.len()`) |
+| `reader.rs` 44–46 `finish` | `Reader::finish` | same `TrailingBytes`; braces only |
+| `reader.rs` 172–174 `read_array_header` | `Reader::read_array_header` | body identical (`read_head(MAJOR_ARRAY)`) |
+| `reader.rs` 181–183 `read_map_header` | `Reader::read_map_header` | body identical (`read_head(MAJOR_MAP)`) |
+| `cose/mod.rs` 222–234 | `read_sign1_envelope` | array4 + two bstrs + empty map + sig64 + finish |
+
+## Intentional diffs (`// EXTRACT:`)
+
+| Crate | Why |
+|---|---|
+| `CodecError::{MalformedEnvelope, NonEmptyUnprotectedHeader}` | source lives on `CoseError`; pulling `CoseError` is deferred. Same reject, different type |
+| Public free `read_array_header` / `read_map_header` / `read_sign1_envelope` | theorem entry points; methods stay on `Reader` |
+| `Envelope` struct | source uses locals; theorem needs a named `Ok` payload |
+| No `decode_protected_header` / `build_sig_structure` / dalek | later layers |
+
+Source `verify` turns `finish`’s `CodecError::TrailingBytes` into
+`CoseError::Codec(TrailingBytes)` via `From`. This crate returns
+`CodecError::TrailingBytes` directly. Truncated bstr slots stay
+`UnexpectedEnd` (not `WrongLength` on a short signature body).
+
+## Remodel (`// REMODEL:`)
+
+None on this path beyond the layer-1/2 remodels already in `read_head` /
+`read_bstr` / `read_bstr_fixed_64`. `Envelope` omits `Debug`/`Clone`/`Copy`
+for the same unused slice-`fmt` reason as `Reader`.
+
+## Not extracted (after layer 3)
+
+`read_bstr_fixed::<16>` (kid), `next_map_key`, `decode_protected_header`,
+`Typ::from_u64`, `slice_validated_array`, `verify`, `parse_sign1`,
+`Sig_structure`, unions, `MaybeUninit`, raw pointer casts, ed25519, KNTRL
+`Typ` meaning, payload decode, encoder.
