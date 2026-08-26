@@ -12,6 +12,10 @@ Chosen path: `Reader::take` + `Reader::read_head` + `Reader::read_uint`, plus a
 public `&[u8]` wrapper `read_uint` so the theorem is a function of hostile bytes
 (Binder `parse_one` shape). No `while` / `for` / recursion on input length.
 
+`Reader<'a>` + `&mut self` extracted. Aeneas erased the lifetime (`structure Reader`
+with `buf : Slice U8` and `pos : Usize`).  free-function fallback was not
+needed.
+
 ## Line map (copied path)
 
 | Source | Crate (`rust/src/lib.rs`) | Notes |
@@ -24,11 +28,11 @@ public `&[u8]` wrapper `read_uint` so the theorem is a function of hostile bytes
 | `mod.rs` 43 `MAJOR_UNSIGNED` | `MAJOR_UNSIGNED` | body identical |
 | `mod.rs` 55 `MAJOR_MASK` | `MAJOR_MASK` | body identical |
 | `mod.rs` 57 `ADDITIONAL_MASK` | `ADDITIONAL_MASK` | body identical |
-| `reader.rs` 16–19 `Reader` | `Reader` | fields identical |
+| `reader.rs` 16–19 `Reader` fields | `Reader` | `buf`, `pos` identical |
 | `reader.rs` 23–26 `new` | `Reader::new` | body identical |
-| `reader.rs` 52–57 `take` | `Reader::take` | body identical |
-| `reader.rs` 68–118 `read_head` | `Reader::read_head` | body identical |
-| `reader.rs` 126–128 `read_uint` | `Reader::read_uint` | body identical |
+| `reader.rs` 52–57 `take` | `Reader::take` | same `checked_add` + `get`; see REMODEL |
+| `reader.rs` 68–118 `read_head` | `Reader::read_head` | same branches 0..=23 / 24 / 25 / 26 / 27 / 28..=30 / indefinite; see REMODEL |
+| `reader.rs` 126–128 `read_uint` | `Reader::read_uint` | body identical (`read_head(MAJOR_UNSIGNED)`) |
 
 ## Intentional diffs (`// EXTRACT:`)
 
@@ -42,9 +46,23 @@ public `&[u8]` wrapper `read_uint` so the theorem is a function of hostile bytes
 | Public free `read_uint(&[u8])` | theorem entry point; body is `Reader::new` + method |
 | Tests hand-write CBOR vectors | encoder (`write_uint`) is not extracted |
 
-No `// REMODEL:` yet: `Reader<'a>` + `&mut self` is the assigned candidate.
- fallback (cursor returned as `usize`, no `Reader`) is reserved for one
-Aeneas failure on the lifetime.
+## Remodel (`// REMODEL:`)
+
+First Aeneas translation succeeded but emitted `axiom`s for unknown core
+functions (`Option::ok_or`, `Option::copied`, `slice::first`,
+`TryFrom<&[u8]> for [u8; N]`, `Result::map_err`, integer `TryFrom`). Those
+would have been extra axioms on the theorem. Loop-free remodel, same bytes:
+
+| Source | Remodel | Why |
+|---|---|---|
+| `x.ok_or(UnexpectedEnd)?` | `match x { Some(v) => v, None => return Err(UnexpectedEnd) }` | drop `ok_or` axiom |
+| `take(1)?.first().copied().ok_or(...)` | `get_u8(take(1)?, 0)?` | drop `first`/`copied`/`ok_or` |
+| `bytes.try_into().map_err(...)` for `[u8; 2/4/8]` | `get_u8(bytes, i)?` into `from_be_bytes([...])` | drop `try_into`/`map_err` (Binder trap trap) |
+| `u8::try_from(value).is_ok()` | `value <= u64::from(u8::MAX)` (and u16/u32) | drop integer `TryFrom` axiom; same bound |
+| `#[derive(Debug, Clone, Copy)]` on `Reader` | dropped | drop unused slice `fmt` axiom |
+
+`get_u8` is new. Tests still reject `[0x18, 0x05]` as `NonCanonicalLength` and
+round-trip the source uint boundaries.
 
 ## Not extracted
 

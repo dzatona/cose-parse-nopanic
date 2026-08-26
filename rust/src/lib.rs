@@ -43,7 +43,8 @@ const ADDITIONAL_MASK: u8 = 0x1F;
 ///
 /// Every `read_*` method on the chosen path rejects non-canonical encodings
 /// (extra-length forms, indefinite-length items) as it goes.
-#[derive(Debug, Clone, Copy)]
+// REMODEL: dropped `Debug`/`Clone`/`Copy` so Aeneas does not emit an opaque
+// `fmt` axiom for `&[u8]` (unused on the no-panic path).
 pub struct Reader<'a> {
     buf: &'a [u8],
     pos: usize,
@@ -61,10 +62,19 @@ impl<'a> Reader<'a> {
     /// # Errors
     /// Returns [`CodecError::UnexpectedEnd`] if fewer than `n` bytes remain.
     fn take(&mut self, n: usize) -> Result<&'a [u8], CodecError> {
-        let end = self.pos.checked_add(n).ok_or(CodecError::UnexpectedEnd)?;
-        let out = self.buf.get(self.pos..end).ok_or(CodecError::UnexpectedEnd)?;
-        self.pos = end;
-        Ok(out)
+        // REMODEL: `Option::ok_or` is an Aeneas-unknown external (opaque axiom).
+        // Same `checked_add` + `slice::get` as source; `None` is still UnexpectedEnd.
+        let end = match self.pos.checked_add(n) {
+            Some(end) => end,
+            None => return Err(CodecError::UnexpectedEnd),
+        };
+        match self.buf.get(self.pos..end) {
+            Some(out) => {
+                self.pos = end;
+                Ok(out)
+            },
+            None => Err(CodecError::UnexpectedEnd),
+        }
     }
 
     /// Reads one CBOR head (major type + canonical-minimal argument), requiring the major
@@ -77,7 +87,7 @@ impl<'a> Reader<'a> {
     /// [`CodecError::IndefiniteLength`] for the two reserved/indefinite-length additional
     /// values, or [`CodecError::UnexpectedEnd`] if the input is truncated.
     fn read_head(&mut self, major_base: u8) -> Result<u64, CodecError> {
-        let head = self.take(1)?.first().copied().ok_or(CodecError::UnexpectedEnd)?;
+        let head = get_u8(self.take(1)?, 0)?;
         if head & MAJOR_MASK != major_base {
             return Err(CodecError::TypeMismatch);
         }
@@ -87,7 +97,7 @@ impl<'a> Reader<'a> {
         }
         match additional {
             24 => {
-                let byte = self.take(1)?.first().copied().ok_or(CodecError::UnexpectedEnd)?;
+                let byte = get_u8(self.take(1)?, 0)?;
                 if byte < 24 {
                     return Err(CodecError::NonCanonicalLength);
                 }
@@ -95,30 +105,42 @@ impl<'a> Reader<'a> {
             },
             25 => {
                 let bytes = self.take(2)?;
-                let array: [u8; 2] =
-                    bytes.try_into().map_err(|_wrong_len| CodecError::UnexpectedEnd)?;
-                let value = u64::from(u16::from_be_bytes(array));
-                if u8::try_from(value).is_ok() {
+                let value = u64::from(u16::from_be_bytes([get_u8(bytes, 0)?, get_u8(bytes, 1)?]));
+                // REMODEL: `u8::try_from(value).is_ok()` is an Aeneas-unknown
+                // `TryFrom<u64>` axiom; the bound is the same as source.
+                if value <= u64::from(u8::MAX) {
                     return Err(CodecError::NonCanonicalLength);
                 }
                 Ok(value)
             },
             26 => {
                 let bytes = self.take(4)?;
-                let array: [u8; 4] =
-                    bytes.try_into().map_err(|_wrong_len| CodecError::UnexpectedEnd)?;
-                let value = u64::from(u32::from_be_bytes(array));
-                if u16::try_from(value).is_ok() {
+                let value = u64::from(u32::from_be_bytes([
+                    get_u8(bytes, 0)?,
+                    get_u8(bytes, 1)?,
+                    get_u8(bytes, 2)?,
+                    get_u8(bytes, 3)?,
+                ]));
+                // REMODEL: same as `u16::try_from(value).is_ok()` in source.
+                if value <= u64::from(u16::MAX) {
                     return Err(CodecError::NonCanonicalLength);
                 }
                 Ok(value)
             },
             27 => {
                 let bytes = self.take(8)?;
-                let array: [u8; 8] =
-                    bytes.try_into().map_err(|_wrong_len| CodecError::UnexpectedEnd)?;
-                let value = u64::from_be_bytes(array);
-                if u32::try_from(value).is_ok() {
+                let value = u64::from_be_bytes([
+                    get_u8(bytes, 0)?,
+                    get_u8(bytes, 1)?,
+                    get_u8(bytes, 2)?,
+                    get_u8(bytes, 3)?,
+                    get_u8(bytes, 4)?,
+                    get_u8(bytes, 5)?,
+                    get_u8(bytes, 6)?,
+                    get_u8(bytes, 7)?,
+                ]);
+                // REMODEL: same as `u32::try_from(value).is_ok()` in source.
+                if value <= u64::from(u32::MAX) {
                     return Err(CodecError::NonCanonicalLength);
                 }
                 Ok(value)
@@ -136,6 +158,19 @@ impl<'a> Reader<'a> {
     /// [`CodecError::UnexpectedEnd`] if the input is truncated.
     pub fn read_uint(&mut self) -> Result<u64, CodecError> {
         self.read_head(MAJOR_UNSIGNED)
+    }
+}
+
+/// Index `bytes[i]` as `Result`, never a panic.
+///
+/// REMODEL: source uses `slice::first().copied().ok_or(UnexpectedEnd)` and
+/// `try_into` on a length-checked slice. Both became Aeneas-unknown externals
+/// (`Option::ok_or`, `Option::copied`, `TryFrom<&[u8]> for [u8; N]`,
+/// `Result::map_err`). `slice::get` + `match` is the same bounds check.
+fn get_u8(bytes: &[u8], i: usize) -> Result<u8, CodecError> {
+    match bytes.get(i) {
+        Some(b) => Ok(*b),
+        None => Err(CodecError::UnexpectedEnd),
     }
 }
 
@@ -189,6 +224,19 @@ mod tests {
         let bytes = [0x18_u8, 0x05];
         let err = read_uint(&bytes).expect_err("2-byte form of 5 must be rejected");
         assert_eq!(err, CodecError::NonCanonicalLength);
+        // REMODEL: extra-width forms that `try_from` rejected in source.
+        assert_eq!(
+            read_uint(&[0x19, 0x00, 0xFF]),
+            Err(CodecError::NonCanonicalLength)
+        );
+        assert_eq!(
+            read_uint(&[0x1A, 0x00, 0x00, 0x00, 0xFF]),
+            Err(CodecError::NonCanonicalLength)
+        );
+        assert_eq!(
+            read_uint(&[0x1B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF]),
+            Err(CodecError::NonCanonicalLength)
+        );
     }
 
     #[test]
