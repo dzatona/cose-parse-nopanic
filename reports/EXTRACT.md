@@ -544,6 +544,12 @@ fits (headers + `"Signature1"` + aad + both bstrs). Source already returns
 | `u64::try_from(bytes.len())` | `bytes.len() as u64` | LengthOverflow cannot fire; `usize` fits in `u64` |
 | `out.get(..written_len).ok_or(BufferTooSmall)` | `if written_len > MAX_MESSAGE_LEN` | **none** — `len` only advances after a successful `get_mut` |
 
+Both remodel guards are unreachable in the Aeneas model (`lean/NoPanic.lean`):
+`write_bytes_dest_len_eq` (`dest.len = bytes.len` after `get_mut(len..len+n)`
+returns `Some`) and `sig_structure_len_le_max` (the `if written_len > MAX`
+then-branch is not taken: `SliceSink.len ≤ MAX` is an invariant of `new` and
+`write_bytes`, so the comparison is false; postcondition `Err → False`).
+
 Aeneas did **not** lower `copy_from_slice` to a loop. First extraction of
 borrowed `&mut [u8; 4096]` failed (see `reports/AENEAS.md`); the owned-array
 remodel is the one allowed Binder close. No second copy remodel. No loop
