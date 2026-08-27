@@ -451,6 +451,362 @@ theorem parse_sign1_no_panic (bytes : Slice U8) :
     ∃ r, parse_sign1 bytes = ok r :=
   of_spec (parse_sign1_spec bytes)
 
+/-! # RFC 8949 §4.2.1 smallest-form round-trip (`write_head` then `read_head`)
+
+`write_head` emits a canonical head; `read_head` rejects extra-width forms.
+`major_base` must be a clean major type (low 5 bits clear), matching
+`MAJOR_UNSIGNED` / `MAJOR_BSTR` / `MAJOR_TEXT` / `MAJOR_ARRAY` / `MAJOR_MAP`.
+The 2-byte / 4-byte / 8-byte argument forms are left unproved: `to_be_bytes`
+plus the unrolled `be_byte` ladder is a larger extracted term than the
+inline (0..=23) and 1-byte (24..=255) cases. -/
+
+/-- Written prefix of a `SliceSink`. Length is bounded by the array width. -/
+def written_bytes (sink : SliceSink) : Slice U8 :=
+  ⟨sink.buf.val.slice 0 sink.len.val, by
+    have hle := List.slice_length_le (α := U8) 0 sink.len.val sink.buf.val
+    have heq := Array.length_eq sink.buf
+    scalar_tac⟩
+
+/-- Empty sink, same as a successful `SliceSink.new`. -/
+def empty_sink : SliceSink :=
+  { buf := Array.repeat 4096#usize 0#u8, len := 0#usize }
+
+theorem empty_sink_new : SliceSink.new = ok empty_sink := by
+  unfold SliceSink.new empty_sink
+  simp
+
+theorem additional_mask_val : ADDITIONAL_MASK.val = 31 := by
+  unfold ADDITIONAL_MASK
+  rfl
+
+theorem major_mask_val : MAJOR_MASK.val = 224 := by
+  unfold MAJOR_MASK
+  rfl
+
+theorem u8_and_val (x y : U8) : (x &&& y).val = x.val &&& y.val :=
+  BitVec.toNat_and x.bv y.bv
+
+theorem u8_or_val (x y : U8) : (x ||| y).val = x.val ||| y.val :=
+  BitVec.toNat_or x.bv y.bv
+
+theorem and_31_of_lt_32 (x : Nat) (h : x < 32) : x &&& 31 = x := by
+  have : 31 = 2 ^ 5 - 1 := rfl
+  rw [this, Nat.and_two_pow_sub_one_eq_mod]
+  exact Nat.mod_eq_of_lt h
+
+theorem and_255_of_lt_256 (x : Nat) (h : x < 256) : x &&& 255 = x := by
+  have : 255 = 2 ^ 8 - 1 := rfl
+  rw [this, Nat.and_two_pow_sub_one_eq_mod]
+  exact Nat.mod_eq_of_lt h
+
+theorem and_224_of_and_31_zero (x : Nat) (hx : x < 256) (h : x &&& 31 = 0) :
+    x &&& 224 = x := by
+  have h255 : x &&& 255 = x := and_255_of_lt_256 x hx
+  have hsplit : 31 ||| 224 = 255 := by decide
+  have hdist := Nat.and_or_distrib_left x 31 224
+  rw [hsplit, h255] at hdist
+  rw [h, Nat.zero_or] at hdist
+  exact hdist.symm
+
+theorem and_224_of_lt_32 (x : Nat) (h : x < 32) : x &&& 224 = 0 := by
+  have h31 : x &&& 31 = x := and_31_of_lt_32 x h
+  have hdis : 31 &&& 224 = 0 := by decide
+  calc
+    x &&& 224 = (x &&& 31) &&& 224 := by rw [h31]
+    _ = x &&& (31 &&& 224) := by rw [Nat.and_assoc]
+    _ = x &&& 0 := by rw [hdis]
+    _ = 0 := Nat.and_zero x
+
+/-- Low 5 bits of `major_base` are clear: it is a CBOR major-type tag. -/
+def CleanMajor (major_base : U8) : Prop :=
+  (major_base &&& ADDITIONAL_MASK) = 0#u8
+
+theorem clean_major_val (major_base : U8) (h : CleanMajor major_base) :
+    major_base.val &&& 31 = 0 := by
+  unfold CleanMajor at h
+  have h0 := congrArg UScalar.val h
+  simpa [u8_and_val, additional_mask_val] using h0
+
+theorem clean_major_and_mask (major_base : U8) (h : CleanMajor major_base) :
+    (major_base &&& MAJOR_MASK) = major_base := by
+  apply UScalar.val_eq_imp
+  simp only [u8_and_val, major_mask_val]
+  exact and_224_of_and_31_zero major_base.val (by scalar_tac) (clean_major_val major_base h)
+
+theorem extra_lt_32_and_major (extra : U8) (h : extra.val < 32) :
+    extra.val &&& 224 = 0 :=
+  and_224_of_lt_32 extra.val h
+
+theorem or_and_major (major extra : U8) (hmajor : CleanMajor major)
+    (hextra : extra.val < 32) :
+    ((major ||| extra) &&& MAJOR_MASK) = major := by
+  apply UScalar.val_eq_imp
+  simp only [u8_and_val, u8_or_val, major_mask_val]
+  have hmajv : major.val &&& 224 = major.val := by
+    have := clean_major_and_mask major hmajor
+    have := congrArg UScalar.val this
+    simpa [u8_and_val, major_mask_val] using this
+  have hex : extra.val &&& 224 = 0 := extra_lt_32_and_major extra hextra
+  rw [Nat.and_or_distrib_right, hex, Nat.or_zero, hmajv]
+
+theorem or_and_additional (major extra : U8) (hmajor : CleanMajor major)
+    (hextra : extra.val < 32) :
+    ((major ||| extra) &&& ADDITIONAL_MASK) = extra := by
+  apply UScalar.val_eq_imp
+  simp only [u8_and_val, u8_or_val, additional_mask_val]
+  have h0 : major.val &&& 31 = 0 := clean_major_val major hmajor
+  have hextra31 : extra.val &&& 31 = extra.val := and_31_of_lt_32 extra.val hextra
+  rw [Nat.and_or_distrib_right, h0, Nat.zero_or, hextra31]
+
+theorem usize_checked_add_zero (n : Usize) :
+    Usize.checked_add 0#usize n = some n := by
+  have h := Usize.checked_add_bv_spec (0#usize) n
+  cases hc : Usize.checked_add 0#usize n with
+  | none =>
+    simp only [hc] at h
+    have hz : (0#usize).val = 0 := rfl
+    have hn : n.val ≤ Usize.max := by scalar_tac
+    scalar_tac
+  | some z =>
+    simp only [hc] at h
+    obtain ⟨_, hv, _⟩ := h
+    apply congrArg some
+    apply UScalar.val_eq_imp
+    have hz : (0#usize).val = 0 := rfl
+    omega
+
+theorem take_ok (self : Reader) (n : Usize)
+    (hbound : self.pos.val + n.val ≤ self.buf.length) :
+    Reader.take self n ⦃ r reader' =>
+      ∃ (out : Slice U8) (end1 : Usize),
+        Usize.checked_add self.pos n = some end1 ∧
+        r = core.result.Result.Ok out ∧
+        reader' = { buf := self.buf, pos := end1 } ∧
+        out.val = self.buf.val.slice self.pos.val end1.val ⦄ := by
+  unfold Reader.take
+  simp only [lift, bind_tc_ok]
+  cases hca : Usize.checked_add self.pos n with
+  | none =>
+    have hadd := Usize.checked_add_bv_spec self.pos n
+    simp only [hca] at hadd
+    have hlen := Slice.length_ineq self.buf
+    have heq : self.buf.length = self.buf.val.length := rfl
+    scalar_tac
+  | some end1 =>
+    have hadd := Usize.checked_add_bv_spec self.pos n
+    simp only [hca] at hadd
+    obtain ⟨_, hend, _⟩ := hadd
+    simp only [bind_tc_ok, core.slice.Slice.get]
+    unfold core.slice.index.SliceIndexRangeUsizeSlice.get
+    have hle : self.pos ≤ end1 := (UScalar.le_equiv self.pos end1).mpr (by omega)
+    split
+    · simp only [bind_tc_ok, spec_ok, hca]
+      refine ⟨⟨self.buf.val.slice self.pos.val end1.val, by
+        have := List.slice_length_le (α := U8) self.pos.val end1.val self.buf.val
+        have := Slice.length_ineq self.buf
+        scalar_tac⟩, end1, rfl, rfl, rfl, rfl⟩
+    · rename_i hcond
+      have : self.pos ≤ end1 ∧ end1 ≤ self.buf.length :=
+        ⟨hle, by
+          have : end1.val ≤ self.buf.length := by omega
+          simpa [UScalar.le_equiv] using this⟩
+      exact (hcond this).elim
+
+theorem get_u8_ok (bytes : Slice U8) (i : Usize) (hi : i.val < bytes.length) :
+    get_u8 bytes i ⦃ r => r = core.result.Result.Ok (bytes[i]'hi) ⦄ := by
+  unfold get_u8
+  simp only [core.slice.Slice.get, core.slice.index.Usize.get, bind_tc_ok]
+  have hsome : bytes[i]? = some (bytes[i]'hi) := by
+    simp only [Slice.getElem?_Usize_eq, Slice.getElem_Usize_eq]
+    exact List.getElem?_eq_getElem hi
+  simp [hsome, spec_ok]
+
+theorem take_ok_eq (self : Reader) (n : Usize)
+    (hbound : self.pos.val + n.val ≤ self.buf.length) :
+    ∃ (out : Slice U8) (end1 : Usize),
+      Usize.checked_add self.pos n = some end1 ∧
+      Reader.take self n =
+        ok (core.result.Result.Ok out, { buf := self.buf, pos := end1 }) ∧
+      out.val = self.buf.val.slice self.pos.val end1.val := by
+  have h := take_ok self n hbound
+  cases ht : Reader.take self n with
+  | fail _ => simp [spec, theta, ht] at h
+  | div => simp [spec, theta, ht] at h
+  | ok vr =>
+    rcases vr with ⟨r, reader'⟩
+    simp [spec, theta, wp_return, ht, uncurry'] at h
+    obtain ⟨out, end1, hca, hr, hrdr, hslice⟩ := h
+    refine ⟨out, end1, hca, ?_, hslice⟩
+    simp [ht, hr, hrdr]
+
+theorem get_u8_ok_eq (bytes : Slice U8) (i : Usize) (hi : i.val < bytes.length) :
+    get_u8 bytes i = ok (core.result.Result.Ok (bytes[i]'hi)) := by
+  have h := get_u8_ok bytes i hi
+  cases hg : get_u8 bytes i with
+  | fail _ => simp [spec, theta, hg] at h
+  | div => simp [spec, theta, hg] at h
+  | ok r =>
+    simp [spec, theta, wp_return, hg] at h
+    simp [hg, h]
+
+/-- Canonical 1-byte head: additional-info `arg` with `arg < 24`. -/
+def canon_ai0_23 (major_base : U8) (arg : U64) : Slice U8 :=
+  Array.to_slice (Array.make 1#usize [major_base ||| UScalar.cast .U8 arg])
+
+/-- Canonical 2-byte head: additional-info 24, argument in `24..=255`. -/
+def canon_ai24 (major_base : U8) (arg : U64) : Slice U8 :=
+  Array.to_slice
+    (Array.make 2#usize [major_base ||| 24#u8, UScalar.cast .U8 arg])
+
+theorem canon_ai0_23_length (major_base : U8) (arg : U64) :
+    (canon_ai0_23 major_base arg).length = 1 := by
+  simp [canon_ai0_23, Array.to_slice, Array.make]
+
+theorem canon_ai24_length (major_base : U8) (arg : U64) :
+    (canon_ai24 major_base arg).length = 2 := by
+  simp [canon_ai24, Array.to_slice, Array.make]
+
+theorem canon_ai0_23_get (major_base : U8) (arg : U64) :
+    (canon_ai0_23 major_base arg).val[0]'(by simp [canon_ai0_23_length]) =
+      major_base ||| UScalar.cast .U8 arg := by
+  simp [canon_ai0_23, Array.to_slice, Array.make]
+
+theorem canon_ai24_get0 (major_base : U8) (arg : U64) :
+    (canon_ai24 major_base arg).val[0]'(by simp [canon_ai24_length]) =
+      major_base ||| 24#u8 := by
+  simp [canon_ai24, Array.to_slice, Array.make]
+
+theorem canon_ai24_get1 (major_base : U8) (arg : U64) :
+    (canon_ai24 major_base arg).val[1]'(by simp [canon_ai24_length]) =
+      UScalar.cast .U8 arg := by
+  simp [canon_ai24, Array.to_slice, Array.make]
+
+theorem cast_u8_of_lt_256 (arg : U64) (h : arg.val ≤ 255) :
+    (UScalar.cast .U8 arg).val = arg.val := by
+  simp only [UScalar.cast_val_eq]
+  have : 2 ^ (UScalarTy.U8).numBits = 256 := by simp
+  rw [this]
+  exact Nat.mod_eq_of_lt (Nat.lt_succ_of_le h)
+
+theorem from_u8_cast_id (arg : U64) (h : arg.val ≤ 255) :
+    core.convert.num.FromU64U8.from (UScalar.cast .U8 arg) = arg := by
+  apply UScalar.val_eq_imp
+  simp only [core.convert.num.FromU64U8.from_val_eq, cast_u8_of_lt_256 arg h]
+
+theorem write_head_ai0_23_eq (sink : SliceSink) (major_base : U8) (arg : U64)
+    (harg : arg < 24#u64) :
+    write_head sink major_base arg =
+      SliceSink.write_bytes sink (canon_ai0_23 major_base arg) := by
+  unfold write_head canon_ai0_23
+  simp [harg, lift, bind_tc_ok]
+
+theorem list_slice_zero_one (s : List U8) (h : 0 < s.length) :
+    s.slice 0 1 = [s[0]] := by
+  cases s with
+  | nil => cases h
+  | cons b rest => simp [List.slice_zero_j]
+
+/-- `read_head` on a 1-byte smallest-form encoding recovers `arg`. -/
+theorem read_head_ai0_23 (major_base : U8) (arg : U64)
+    (hmajor : CleanMajor major_base) (harg : arg < 24#u64) :
+    ∃ rdr,
+      Reader.read_head
+          { buf := canon_ai0_23 major_base arg, pos := 0#usize } major_base =
+        ok (core.result.Result.Ok arg, rdr) := by
+  have hargn : arg.val < 24 := (UScalar.lt_equiv arg 24#u64).mp harg
+  have hextra : (UScalar.cast .U8 arg).val < 32 := by
+    rw [cast_u8_of_lt_256 arg (by omega)]
+    omega
+  have hhead :
+      ((major_base ||| UScalar.cast .U8 arg) &&& MAJOR_MASK) = major_base :=
+    or_and_major major_base (UScalar.cast .U8 arg) hmajor hextra
+  have hadd :
+      ((major_base ||| UScalar.cast .U8 arg) &&& ADDITIONAL_MASK) =
+        UScalar.cast .U8 arg :=
+    or_and_additional major_base (UScalar.cast .U8 arg) hmajor hextra
+  set rdr0 : Reader := { buf := canon_ai0_23 major_base arg, pos := 0#usize }
+  obtain ⟨out, end1, hca, htakeeq, hslice⟩ :=
+    take_ok_eq rdr0 1#usize (by simp [canon_ai0_23_length, rdr0])
+  unfold Reader.read_head
+  rw [htakeeq]
+  unfold core.result.Result.Insts.CoreOpsTry.branch
+  simp [bind_tc_ok]
+  have hpos0 : rdr0.pos = 0#usize := by simp [rdr0]
+  have hbuf0 : rdr0.buf = canon_ai0_23 major_base arg := by simp [rdr0]
+  have hend : end1 = 1#usize := by
+    rw [hpos0, usize_checked_add_zero] at hca
+    exact Option.some.inj hca.symm
+  have houtval : out.val = [major_base ||| UScalar.cast .U8 arg] := by
+    rw [hslice, hend, hpos0, hbuf0]
+    have h0 : (0#usize).val = 0 := rfl
+    have h1 : (1#usize).val = 1 := rfl
+    simp only [h0, h1]
+    have hlen0 : 0 < (canon_ai0_23 major_base arg).val.length := by
+      simp [canon_ai0_23_length]
+    rw [list_slice_zero_one _ hlen0, canon_ai0_23_get]
+  have houtlen : out.length = 1 := by simp [Slice.length, houtval]
+  have hgeteq := get_u8_ok_eq out 0#usize (by simp [houtlen])
+  rw [hgeteq]
+  simp [bind_tc_ok, lift]
+  have hb : out[0#usize]'(by simp [houtlen]) =
+      major_base ||| UScalar.cast .U8 arg := by
+    simp only [Slice.getElem_Usize_eq, houtval]
+    rfl
+  have hmask :
+      (out[0#usize]'(by simp [houtlen]) &&& MAJOR_MASK) = major_base := by
+    simpa [hb] using hhead
+  split
+  · have haddb :
+        (out[0#usize]'(by simp [houtlen]) &&& ADDITIONAL_MASK) =
+          UScalar.cast .U8 arg := by
+      simpa [hb] using hadd
+    have hlt : UScalar.cast .U8 arg < 24#u8 :=
+      (UScalar.lt_equiv _ _).mpr (by
+        have h24 : (24#u8).val = 24 := rfl
+        rw [cast_u8_of_lt_256 arg (by omega), h24]
+        omega)
+    have hidx : out[0#usize]'(by simp [houtlen]) =
+        out.val[0]'(by simp [houtval]) := by
+      simp [Slice.getElem_Usize_eq]
+    split
+    · refine ⟨{ buf := rdr0.buf, pos := end1 }, ?_⟩
+      simp [Prod.mk.injEq]
+      apply UScalar.val_eq_imp
+      simp only [core.convert.num.FromU64U8.from_val_eq, u8_and_val, additional_mask_val]
+      have hconn := congrArg UScalar.val haddb
+      simp only [u8_and_val, additional_mask_val, hidx] at hconn ⊢
+      have hcast := cast_u8_of_lt_256 arg (by omega)
+      omega
+    · rename_i hnlt
+      have hval := congrArg UScalar.val hadd
+      simp only [u8_and_val, additional_mask_val, u8_or_val] at hval
+      simp [houtval, u8_and_val, additional_mask_val, u8_or_val] at hnlt
+      have hcast := cast_u8_of_lt_256 arg (by omega)
+      have hmod : arg.val % 256 = arg.val := Nat.mod_eq_of_lt (by omega)
+      rw [hcast] at hval
+      rw [hmod] at hnlt
+      rw [hval] at hnlt
+      omega
+  · rename_i hne
+    exact (hne (congrArg UScalar.val hmask)).elim
+
+theorem clean_major_unsigned : CleanMajor MAJOR_UNSIGNED := by
+  unfold CleanMajor MAJOR_UNSIGNED ADDITIONAL_MASK
+  native_decide
+
+/-- WP form of `read_head_ai0_23`. -/
+@[step]
+theorem read_head_ai0_23_spec (major_base : U8) (arg : U64)
+    (hmajor : CleanMajor major_base) (harg : arg < 24#u64) :
+    Reader.read_head
+      { buf := canon_ai0_23 major_base arg, pos := 0#usize } major_base
+    ⦃ r _ => r = core.result.Result.Ok arg ⦄ := by
+  obtain ⟨rdr, h⟩ := read_head_ai0_23 major_base arg hmajor harg
+  simp [h, spec_ok, uncurry']
+
+-- Encode-then-decode for AI 0..=23 still needs `written_bytes = canon_ai0_23`
+-- after `write_bytes` into `empty_sink` (extracted mutation). Not claimed.
+
 -- Expected: propext, Classical.choice, Quot.sound. See reports/PROOF.md.
 #print axioms read_uint_no_panic
 #print axioms read_bstr_no_panic
@@ -463,5 +819,9 @@ theorem parse_sign1_no_panic (bytes : Slice U8) :
 #print axioms parse_sign1_no_panic
 #print axioms write_bytes_dest_len_eq
 #print axioms sig_structure_len_le_max
+#print axioms read_head_ai0_23
+#print axioms read_head_ai0_23_spec
+#print axioms write_head_ai0_23_eq
+#print axioms take_ok_eq
 
 end NoPanic

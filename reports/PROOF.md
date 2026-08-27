@@ -40,7 +40,7 @@ Leaves are `@[step]` specs; composites use `step*`; `read_head` is
 
 ## Live run
 
-Crate **0.15.0**. Pins: Charon `909ff09a` v0.1.220, Aeneas `c2015b86`,
+Crate **0.16.0**. Pins: Charon `909ff09a` v0.1.220, Aeneas `c2015b86`,
 Lean 4.31.0. `Debug` is `#[cfg_attr(test, derive(Debug))]` so Charon
 does not extract `core.fmt`. Generated Lean has no `CoreFmtDebug`.
 
@@ -51,9 +51,9 @@ on it.
 
 ```
 $ shasum -a 256 rust/src/lib.rs rust/Cargo.toml rust/Cargo.lock
-12f6356c89cd8c65a87c0d8c244b842c93a57c8aa3a30290104bdade9d9b783e  rust/src/lib.rs
-6a6c27d37a19fba49790c90f8bc247a1ab95aad827078c310fa77bc97c3486e4  rust/Cargo.toml
-79f97181da7f9202f56379d974d1c3e4b6946a627d3e75ba691c6e056105e28b  rust/Cargo.lock
+9fe042cbe12eac3b75f1f79b0889c35abdb844b1ad901ca642d0b8be537063e1  rust/src/lib.rs
+c11ad3676b0ff66df11373d759422cc64390e772d710582df060bcfab8711ade  rust/Cargo.toml
+295d693efcb9bd2a8209ea1a23fdbd93ae4f314a1d0b9f4bee2265a189df3b98  rust/Cargo.lock
 ```
 
 ### `cargo test`

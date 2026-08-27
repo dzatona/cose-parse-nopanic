@@ -852,8 +852,9 @@ pub fn parse_sign1<'a>(bytes: &'a [u8]) -> Result<Parsed<'a>, CoseError> {
 mod tests {
     use super::{
         build_sig_structure, decode_protected_header, parse_sign1, read_array_header, read_bstr,
-        read_bstr_fixed_64, read_map_header, read_sign1_envelope, read_uint, CodecError, CoseError,
-        Reader, Typ, AAD_ENROLL, AAD_LICENSE, AAD_REVOKE, AAD_TRUST_UPDATE, MAX_MESSAGE_LEN,
+        read_bstr_fixed_64, read_map_header, read_sign1_envelope, read_uint, write_head,
+        CodecError, CoseError, Reader, SliceSink, Typ, AAD_ENROLL, AAD_LICENSE, AAD_REVOKE,
+        AAD_TRUST_UPDATE, MAX_MESSAGE_LEN,
     };
 
     /// Canonical 4-array: empty protected, empty unprotected map, empty payload,
@@ -931,6 +932,51 @@ mod tests {
                 "Reader method must preserve the exact value"
             );
         }
+    }
+
+    /// Encode then decode: `write_head` into an empty sink, `read_head` on the
+    /// written prefix recovers `arg`. Covers additional-info 0..=23, 24 (1-byte),
+    /// and the 2/4/8-byte smallest-form boundaries. Extra-width `[0x18, 0x05]`
+    /// stays `NonCanonicalLength`.
+    #[test]
+    fn should_round_trip_write_then_read_head() {
+        let majors: [u8; 6] = [0x00, 0x20, 0x40, 0x60, 0x80, 0xA0];
+        let wide: [u64; 7] = [
+            24,
+            255,
+            256,
+            65_535,
+            65_536,
+            u64::from(u32::MAX),
+            u64::from(u32::MAX) + 1,
+        ];
+        for major in majors {
+            for arg in 0_u64..=23 {
+                let mut sink = SliceSink::new();
+                write_head(&mut sink, major, arg).expect("empty sink has room for a CBOR head");
+                assert_eq!(sink.len, 1, "AI 0..=23 is one byte");
+                let extra = u8::try_from(arg).expect("arg < 24 fits u8");
+                assert_eq!(sink.buf[0], major | extra, "RFC 8949 smallest-form byte");
+                let mut reader = Reader::new(&sink.buf[..sink.len]);
+                let decoded = reader
+                    .read_head(major)
+                    .expect("canonical write_head bytes must decode");
+                assert_eq!(decoded, arg, "major={major:#x} arg={arg}");
+            }
+            for arg in wide {
+                let mut sink = SliceSink::new();
+                write_head(&mut sink, major, arg).expect("empty sink has room for a CBOR head");
+                let mut reader = Reader::new(&sink.buf[..sink.len]);
+                let decoded = reader
+                    .read_head(major)
+                    .expect("canonical write_head bytes must decode");
+                assert_eq!(decoded, arg, "major={major:#x} arg={arg}");
+            }
+        }
+        assert_eq!(
+            read_uint(&[0x18, 0x05]),
+            Err(CodecError::NonCanonicalLength)
+        );
     }
 
     /// Copied from source `should_reject_non_canonical_uint_length`.
