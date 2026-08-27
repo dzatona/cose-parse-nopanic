@@ -20,13 +20,19 @@ open Aeneas Aeneas.Std Aeneas.Std.WP Result
 open cose_parse_nopanic
 
 set_option linter.unusedSimpArgs false
-set_option maxHeartbeats 4000000
+set_option maxHeartbeats 8000000
 set_option maxRecDepth 4096
 
 namespace NoPanic
 
 /-- No-panic `step*`: postcondition is `True`, so skip grind. -/
 macro "nstep" : tactic => `(tactic| step* -grind -threadGrindState)
+
+theorem let_prod_mk {α β γ} (a : α) (b : β) (f : α → β → γ) :
+    (let (x, y) := (a, b); f x y) = f a b := rfl
+
+theorem match_prod_mk {α β γ} (a : α) (b : β) (f : α → β → γ) :
+    (match (a, b) with | (x, y) => f x y) = f a b := rfl
 
 /-- `spec m (fun _ => True)` is exactly “the panic monad returned `ok`”. -/
 theorem of_spec {α} {m : Result α} (h : m ⦃ _ => True ⦄) : ∃ v, m = ok v := by
@@ -649,6 +655,133 @@ theorem get_u8_ok_eq (bytes : Slice U8) (i : Usize) (hi : i.val < bytes.length) 
     simp [spec, theta, wp_return, hg] at h
     simp [hg, h]
 
+theorem take_err (self : Reader) (n : Usize)
+    (hbound : ¬ (self.pos.val + n.val ≤ self.buf.length)) :
+    Reader.take self n =
+      ok (core.result.Result.Err CodecError.UnexpectedEnd, self) := by
+  unfold Reader.take
+  simp only [lift, bind_tc_ok]
+  cases hca : Usize.checked_add self.pos n with
+  | none => rfl
+  | some end1 =>
+    have hadd := Usize.checked_add_bv_spec self.pos n
+    simp only [hca] at hadd
+    obtain ⟨_, hend, _⟩ := hadd
+    simp only [bind_tc_ok, core.slice.Slice.get]
+    unfold core.slice.index.SliceIndexRangeUsizeSlice.get
+    split
+    · rename_i hcond
+      have : end1.val ≤ self.buf.length := by
+        have := hcond.2
+        scalar_tac
+      omega
+    · rfl
+
+theorem checked_add_val (p n end1 : Usize)
+    (h : Usize.checked_add p n = some end1) :
+    end1.val = p.val + n.val := by
+  have hadd := Usize.checked_add_bv_spec p n
+  simp only [h] at hadd
+  obtain ⟨_, hend, _⟩ := hadd
+  exact hend
+
+theorem take_out_length (self : Reader) (n : Usize) (out : Slice U8) (end1 : Usize)
+    (hca : Usize.checked_add self.pos n = some end1)
+    (hslice : out.val = self.buf.val.slice self.pos.val end1.val)
+    (hbound : self.pos.val + n.val ≤ self.buf.length) :
+    out.length = n.val := by
+  have hend := checked_add_val self.pos n end1 hca
+  have hlen : self.buf.length = self.buf.val.length := rfl
+  simp only [Slice.length, hslice, List.slice_length, hend, hlen] at *
+  omega
+
+theorem list_slice_one {α} (s : List α) (i : Nat) (hi : i < s.length) :
+    s.slice i (i + 1) = [s[i]] := by
+  induction s generalizing i with
+  | nil => cases hi
+  | cons x xs ih =>
+    cases i with
+    | zero => simp [List.slice]
+    | succ j =>
+      have hj : j < xs.length := by
+        simp at hi
+        omega
+      simpa [List.slice] using ih j hj
+
+/-- `?` on `Err` cannot yield `Ok n`. -/
+theorem try_err_ne_ok {T} (e : CodecError) (self rdr : Reader) (n : U64)
+    (cont : T → Result ((core.result.Result U64 CodecError) × Reader))
+    (h :
+      (do
+        let cf ← core.result.Result.Insts.CoreOpsTry.branch
+          (core.result.Result.Err e : core.result.Result T CodecError)
+        match cf with
+        | core.ops.control_flow.ControlFlow.Continue val => cont val
+        | core.ops.control_flow.ControlFlow.Break residual =>
+          let r ←
+            core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+              U64 (core.convert.FromSame CodecError) residual
+          ok (r, self)) = ok (core.result.Result.Ok n, rdr)) : False := by
+  simp [core.result.Result.Insts.CoreOpsTry.branch,
+        core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual,
+        core.convert.FromSame, core.convert.FromSame.from, bind_tc_ok] at h
+
+/-- `?` on `Ok v` continues with `v`. -/
+theorem try_ok_reduce {T} (v : T) (self : Reader)
+    (cont : T → Result ((core.result.Result U64 CodecError) × Reader)) :
+    (do
+      let cf ← core.result.Result.Insts.CoreOpsTry.branch
+        (core.result.Result.Ok v : core.result.Result T CodecError)
+      match cf with
+      | core.ops.control_flow.ControlFlow.Continue val => cont val
+      | core.ops.control_flow.ControlFlow.Break residual =>
+        let r ←
+          core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+            U64 (core.convert.FromSame CodecError) residual
+        ok (r, self)) = cont v := by
+  simp [core.result.Result.Insts.CoreOpsTry.branch, bind_tc_ok]
+
+theorem u8_max_val : core.num.U8.MAX.val = 255 := rfl
+
+theorem u16_max_val : core.num.U16.MAX.val = 65535 := rfl
+
+theorem u32_max_val : core.num.U32.MAX.val = 4294967295 := rfl
+
+theorem from_u8_max_val :
+    (core.convert.num.FromU64U8.from core.num.U8.MAX).val = 255 := by
+  rw [core.convert.num.FromU64U8.from_val_eq, u8_max_val]
+
+theorem from_u16_max_val :
+    (core.convert.num.FromU64U16.from core.num.U16.MAX).val = 65535 := by
+  rw [core.convert.num.FromU64U16.from_val_eq, u16_max_val]
+
+theorem from_u32_max_val :
+    (core.convert.num.FromU64U32.from core.num.U32.MAX).val = 4294967295 := by
+  rw [core.convert.num.FromU64U32.from_val_eq, u32_max_val]
+
+theorem not_le_u64 {x y : U64} (h : ¬ x ≤ y) : y.val < x.val := by
+  have := (UScalar.le_equiv x y).not.mp h
+  omega
+
+theorem ok_err_ne_ok (e : CodecError) (n : U64) (r1 r2 : Reader)
+    (h : ok (core.result.Result.Err e, r1) = ok (core.result.Result.Ok n, r2)) :
+    False := by
+  injection h with h'
+  nomatch h'
+
+theorem decLe_rec_eq_ite {α} {n m : Nat} (e t : α) :
+    Decidable.rec (motive := fun _ => α) (fun _ => e) (fun _ => t) (Nat.decLe n m) =
+      if n ≤ m then t else e := by
+  by_cases h : n ≤ m
+  · simp [h]
+    cases hm : Nat.decLe n m with
+    | isTrue ht => rfl
+    | isFalse hf => exact (hf h).elim
+  · simp [h]
+    cases hm : Nat.decLe n m with
+    | isTrue ht => exact (h ht).elim
+    | isFalse hf => rfl
+
 /-- Canonical 1-byte head: additional-info `arg` with `arg < 24`. -/
 def canon_ai0_23 (major_base : U8) (arg : U64) : Slice U8 :=
   Array.to_slice (Array.make 1#usize [major_base ||| UScalar.cast .U8 arg])
@@ -807,6 +940,466 @@ theorem read_head_ai0_23_spec (major_base : U8) (arg : U64)
 -- Encode-then-decode for AI 0..=23 still needs `written_bytes = canon_ai0_23`
 -- after `write_bytes` into `empty_sink` (extracted mutation). Not claimed.
 
+/-! # RFC 8949 §4.2.1 canonicity (`Ok n` ⇒ smallest-form additional-info)
+
+`read_head_ai0_23` is the converse on 1-byte heads (canonical encoding → `Ok`).
+This section is decode-only: a successful `Ok n` used additional-info
+0..=23 / 24 / 25 / 26 / 27 with the min-width cuts in `read_head`
+(`value <= u8::MAX` / `u16::MAX` / `u32::MAX`). Not encode-then-decode.
+Not full RFC 8949. -/
+
+/-- Additional-info `ai` is RFC 8949 §4.2.1 smallest-form width for `n`.
+    AI 25/26/27 include the 2/4/8-byte min-width cuts: the argument does not
+    fit the next-smaller encoding. Reserved 28..=31 are excluded. -/
+def SmallestFormAi (n : U64) (ai : Nat) : Prop :=
+  (ai < 24 ∧ n.val = ai) ∨
+  (ai = 24 ∧ 24 ≤ n.val ∧ n.val ≤ 255) ∨
+  (ai = 25 ∧ 256 ≤ n.val ∧ n.val ≤ 65535) ∨
+  (ai = 26 ∧ 65536 ≤ n.val ∧ n.val ≤ 4294967295) ∨
+  (ai = 27 ∧ 4294967296 ≤ n.val)
+
+theorem smallest_form_ai0_23 (additional : U8) (n : U64)
+    (hlt : additional < 24#u8)
+    (hn : n = core.convert.num.FromU64U8.from additional) :
+    SmallestFormAi n additional.val := by
+  refine Or.inl ⟨?_, ?_⟩
+  · have h24 : (24#u8).val = 24 := rfl
+    have := (UScalar.lt_equiv additional 24#u8).mp hlt
+    simpa [h24] using this
+  · rw [hn, core.convert.num.FromU64U8.from_val_eq]
+
+theorem smallest_form_ai24 (byte : U8) (n : U64)
+    (hge : ¬ byte < 24#u8)
+    (hn : n = core.convert.num.FromU64U8.from byte) :
+    SmallestFormAi n 24 := by
+  refine Or.inr (Or.inl ⟨rfl, ?_, ?_⟩)
+  · have h24 : (24#u8).val = 24 := rfl
+    have hnv : n.val = byte.val := by
+      rw [hn, core.convert.num.FromU64U8.from_val_eq]
+    have := (UScalar.lt_equiv byte 24#u8).not.mp hge
+    have : 24 ≤ byte.val := by simpa [h24] using (Nat.not_lt.mp this)
+    omega
+  · have hnv : n.val = byte.val := by
+      rw [hn, core.convert.num.FromU64U8.from_val_eq]
+    have hmax : byte.val ≤ 255 := by scalar_tac
+    omega
+
+theorem smallest_form_ai25 (n : U64)
+    (hlo : 256 ≤ n.val) (hhi : n.val ≤ 65535) :
+    SmallestFormAi n 25 :=
+  Or.inr (Or.inr (Or.inl ⟨rfl, hlo, hhi⟩))
+
+theorem smallest_form_ai26 (n : U64)
+    (hlo : 65536 ≤ n.val) (hhi : n.val ≤ 4294967295) :
+    SmallestFormAi n 26 :=
+  Or.inr (Or.inr (Or.inr (Or.inl ⟨rfl, hlo, hhi⟩)))
+
+theorem smallest_form_ai27 (n : U64) (hlo : 4294967296 ≤ n.val) :
+    SmallestFormAi n 27 :=
+  Or.inr (Or.inr (Or.inr (Or.inr ⟨rfl, hlo⟩)))
+
+theorem from_u16_le_max (x : U16) :
+    (core.convert.num.FromU64U16.from x).val ≤ 65535 := by
+  rw [core.convert.num.FromU64U16.from_val_eq]
+  have : x.val ≤ U16.max := by scalar_tac
+  simpa [U16.max_eq] using this
+
+theorem from_u32_le_max (x : U32) :
+    (core.convert.num.FromU64U32.from x).val ≤ 4294967295 := by
+  rw [core.convert.num.FromU64U32.from_val_eq]
+  have : x.val ≤ U32.max := by scalar_tac
+  simpa [U32.max_eq] using this
+
+/-- Close `ok (Err _, _) = ok (Ok n, _)` after a `?` residual. -/
+theorem residual_ne_ok (e : CodecError) (self rdr : Reader) (n : U64)
+    (h :
+      (do
+        let r ←
+          core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+            U64 (core.convert.FromSame CodecError) (core.result.Result.Err e)
+        ok (r, self)) = ok (core.result.Result.Ok n, rdr)) : False := by
+  simp [core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual,
+        core.convert.FromSame, core.convert.FromSame.from, bind_tc_ok] at h
+
+/-- Peel `take` + `?` from a `read_head` additional-info arm.
+    Truncation is `Err UnexpectedEnd`, so it cannot be `Ok n`. -/
+theorem peel_take_continue
+    {self : Reader} {nbytes : Usize} {n : U64} {rdr : Reader}
+    {cont : Slice U8 → Reader → Result ((core.result.Result U64 CodecError) × Reader)}
+    (h :
+      (do
+        let (r2, self2) ← Reader.take self nbytes
+        let cf2 ← core.result.Result.Insts.CoreOpsTry.branch r2
+        match cf2 with
+        | core.ops.control_flow.ControlFlow.Continue val2 => cont val2 self2
+        | core.ops.control_flow.ControlFlow.Break residual =>
+          let r3 ←
+            core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+              U64 (core.convert.FromSame CodecError) residual
+          ok (r3, self2)) = ok (core.result.Result.Ok n, rdr)) :
+    ∃ (out : Slice U8) (self2 : Reader),
+      self2.buf = self.buf ∧
+      out.length = nbytes.val ∧
+      cont out self2 = ok (core.result.Result.Ok n, rdr) := by
+  by_cases hbound : self.pos.val + nbytes.val ≤ self.buf.length
+  · obtain ⟨out, end1, hca, htakeeq, hslice⟩ := take_ok_eq self nbytes hbound
+    have hlen := take_out_length self nbytes out end1 hca hslice hbound
+    refine ⟨out, { buf := self.buf, pos := end1 }, rfl, hlen, ?_⟩
+    rw [htakeeq] at h
+    simp only [bind_tc_ok, lift, let_prod_mk, match_prod_mk,
+      core.result.Result.Insts.CoreOpsTry.branch] at h
+    exact h
+  · have hte := take_err self nbytes hbound
+    rw [hte] at h
+    simp only [bind_tc_ok, lift, let_prod_mk, match_prod_mk,
+      core.result.Result.Insts.CoreOpsTry.branch] at h
+    exact (residual_ne_ok CodecError.UnexpectedEnd self rdr n h).elim
+
+/-- Peel `get_u8` + `?`. An in-bounds index is `Ok`; it cannot be the
+    residual that would make the arm `Err`. -/
+theorem peel_get_u8_continue
+    {bytes : Slice U8} {i : Usize} {self2 rdr : Reader} {n : U64}
+    {cont : U8 → Result ((core.result.Result U64 CodecError) × Reader)}
+    (hi : i.val < bytes.length)
+    (h :
+      (do
+        let r3 ← get_u8 bytes i
+        let cf3 ← core.result.Result.Insts.CoreOpsTry.branch r3
+        match cf3 with
+        | core.ops.control_flow.ControlFlow.Continue val3 => cont val3
+        | core.ops.control_flow.ControlFlow.Break residual =>
+          let r4 ←
+            core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+              U64 (core.convert.FromSame CodecError) residual
+          ok (r4, self2)) = ok (core.result.Result.Ok n, rdr)) :
+    cont (bytes[i]'hi) = ok (core.result.Result.Ok n, rdr) := by
+  have hget := get_u8_ok_eq bytes i hi
+  rw [hget] at h
+  simp only [bind_tc_ok, lift, let_prod_mk, match_prod_mk,
+    core.result.Result.Insts.CoreOpsTry.branch] at h
+  exact h
+
+/-- The AI-25 `value <= u8::MAX` cut: then-branch is `NonCanonicalLength`. -/
+theorem min_width_if_u8
+    (value : U64) (self2 rdr : Reader) (n : U64)
+    (hhi : value.val ≤ 65535)
+    (h :
+      (if value ≤ core.convert.num.FromU64U8.from core.num.U8.MAX then
+         ok (core.result.Result.Err CodecError.NonCanonicalLength, self2)
+       else
+         ok (core.result.Result.Ok value, self2)) =
+      ok (core.result.Result.Ok n, rdr)) :
+    256 ≤ n.val ∧ n.val ≤ 65535 := by
+  split at h
+  · exact (ok_err_ne_ok _ _ _ _ h).elim
+  · rename_i hgt
+    injection h with h'
+    injection h' with hn _
+    injection hn with hneq
+    subst hneq
+    refine ⟨?_, hhi⟩
+    have := not_le_u64 hgt
+    have := from_u8_max_val
+    omega
+
+/-- The AI-26 `value <= u16::MAX` cut. -/
+theorem min_width_if_u16
+    (value : U64) (self2 rdr : Reader) (n : U64)
+    (hhi : value.val ≤ 4294967295)
+    (h :
+      (if value ≤ core.convert.num.FromU64U16.from core.num.U16.MAX then
+         ok (core.result.Result.Err CodecError.NonCanonicalLength, self2)
+       else
+         ok (core.result.Result.Ok value, self2)) =
+      ok (core.result.Result.Ok n, rdr)) :
+    65536 ≤ n.val ∧ n.val ≤ 4294967295 := by
+  split at h
+  · exact (ok_err_ne_ok _ _ _ _ h).elim
+  · rename_i hgt
+    injection h with h'
+    injection h' with hn _
+    injection hn with hneq
+    subst hneq
+    refine ⟨?_, hhi⟩
+    have := not_le_u64 hgt
+    have := from_u16_max_val
+    omega
+
+/-- The AI-27 `value <= u32::MAX` cut. -/
+theorem min_width_if_u32
+    (value : U64) (self2 rdr : Reader) (n : U64)
+    (h :
+      (if value ≤ core.convert.num.FromU64U32.from core.num.U32.MAX then
+         ok (core.result.Result.Err CodecError.NonCanonicalLength, self2)
+       else
+         ok (core.result.Result.Ok value, self2)) =
+      ok (core.result.Result.Ok n, rdr)) :
+    4294967296 ≤ n.val := by
+  split at h
+  · exact (ok_err_ne_ok _ _ _ _ h).elim
+  · rename_i hgt
+    injection h with h'
+    injection h' with hn _
+    injection hn with hneq
+    subst hneq
+    have := not_le_u64 hgt
+    have := from_u32_max_val
+    omega
+
+/-- Successful `read_head` used RFC 8949 §4.2.1 smallest-form additional-info
+    for `n`, including the 2/4/8-byte min-width cuts. Does not claim the
+    argument payload bytes, encode-then-decode, or the rest of RFC 8949. -/
+theorem read_head_ok_smallest_form
+    (self : Reader) (major_base : U8) (n : U64) (rdr : Reader)
+    (h : Reader.read_head self major_base = ok (core.result.Result.Ok n, rdr)) :
+    ∃ (head : U8),
+      self.buf.val[self.pos.val]? = some head ∧
+      (head &&& MAJOR_MASK) = major_base ∧
+      SmallestFormAi n (head &&& ADDITIONAL_MASK).val := by
+  by_cases hbound : self.pos.val + (1#usize).val ≤ self.buf.length
+  · obtain ⟨out, end1, hca, htakeeq, hslice⟩ := take_ok_eq self 1#usize hbound
+    have houtlen : out.length = 1 :=
+      take_out_length self 1#usize out end1 hca hslice hbound
+    have hget := get_u8_ok_eq out 0#usize (by simp [houtlen])
+    have hlen : self.buf.length = self.buf.val.length := rfl
+    have h1 : (1#usize).val = 1 := rfl
+    have hpos : self.pos.val < self.buf.val.length := by
+      rw [hlen, h1] at hbound
+      omega
+    have hendval := checked_add_val self.pos 1#usize end1 hca
+    have hhead_eq :
+        out[0#usize]'(by simp [houtlen]) = self.buf.val[self.pos.val]'hpos := by
+      simp only [Slice.getElem_Usize_eq]
+      have hs : out.val = self.buf.val.slice self.pos.val (self.pos.val + 1) := by
+        simpa [hendval, h1] using hslice
+      have hs1 : out.val = [self.buf.val[self.pos.val]'hpos] := by
+        rw [hs, list_slice_one _ _ hpos]
+      simp [hs1]
+    set head := out[0#usize]'(by simp [houtlen])
+    have hsome : self.buf.val[self.pos.val]? = some head := by
+      rw [List.getElem?_eq_getElem hpos, hhead_eq]
+    conv at h =>
+      lhs
+      unfold Reader.read_head
+      rw [htakeeq]
+      simp [bind_tc_ok, lift, let_prod_mk, match_prod_mk,
+        core.result.Result.Insts.CoreOpsTry.branch]
+    try rw [hget] at h
+    try simp only [bind_tc_ok, lift, let_prod_mk, match_prod_mk,
+        core.result.Result.Insts.CoreOpsTry.branch] at h
+    split at h
+    · rename_i hmajor
+      have hmajor' : (head &&& MAJOR_MASK) = major_base := by
+        apply UScalar.val_eq_imp
+        simpa [head, u8_and_val, major_mask_val] using hmajor
+      set additional := head &&& ADDITIONAL_MASK
+      split at h
+      · rename_i hlt
+        injection h with h'
+        injection h' with hn _
+        have hn' : n = core.convert.num.FromU64U8.from additional := by
+          simpa [additional, head] using hn.symm
+        refine ⟨head, hsome, hmajor', ?_⟩
+        simpa [additional] using smallest_form_ai0_23 additional n hlt hn'
+      · rename_i hge
+        have hlo : 24 ≤ additional.val := by
+          simp only [additional, u8_and_val, additional_mask_val] at hge ⊢
+          omega
+        have hhi : additional.val ≤ 31 := by
+          simp only [additional, u8_and_val, additional_mask_val]
+          exact Nat.and_le_right
+        have hv :
+            additional.val = 24 ∨ additional.val = 25 ∨ additional.val = 26 ∨
+              additional.val = 27 ∨ additional.val = 28 ∨ additional.val = 29 ∨
+              additional.val = 30 ∨ additional.val = 31 := by omega
+        rcases hv with hv | hv | hv | hv | hv | hv | hv | hv
+        · have hai : additional = 24#u8 := by
+            apply UScalar.val_eq_imp
+            have : (24#u8).val = 24 := rfl
+            omega
+          simp [hai] at h
+          by_cases hbound2 :
+              ({ buf := self.buf, pos := end1 } : Reader).pos.val + (1#usize).val ≤
+                ({ buf := self.buf, pos := end1 } : Reader).buf.length
+          · obtain ⟨out2, end2, hca2, htake2, hslice2⟩ :=
+              take_ok_eq { buf := self.buf, pos := end1 } 1#usize hbound2
+            have hlen2 : out2.length = 1 :=
+              take_out_length { buf := self.buf, pos := end1 } 1#usize out2 end2
+                hca2 hslice2 hbound2
+            have hget2 := get_u8_ok_eq out2 0#usize (by simp [hlen2])
+            conv at h =>
+              lhs
+              rw [htake2]
+              simp [bind_tc_ok, lift, let_prod_mk, match_prod_mk,
+                core.result.Result.Insts.CoreOpsTry.branch]
+            try rw [hget2] at h
+            try simp only [bind_tc_ok, lift, let_prod_mk, match_prod_mk,
+                core.result.Result.Insts.CoreOpsTry.branch] at h
+            by_cases hbyte : (out2[0#usize]'(by simp [hlen2])).val < 24
+            · rw [if_pos hbyte] at h
+              exact (ok_err_ne_ok _ _ _ _ h).elim
+            · rw [if_neg hbyte] at h
+              injection h with h'
+              injection h' with hn _
+              have hn' : n = core.convert.num.FromU64U8.from
+                  (out2[0#usize]'(by simp [hlen2])) := by
+                injection hn with hn1
+                exact hn1.symm
+              have hsf :=
+                smallest_form_ai24 (out2[0#usize]'(by simp [hlen2])) n
+                  (by
+                    have h24 : (24#u8).val = 24 := rfl
+                    intro hlt
+                    have := (UScalar.lt_equiv (out2[0#usize]'(by simp [hlen2])) 24#u8).mp hlt
+                    exact hbyte (by simpa [h24] using this)) hn'
+              have : (head &&& ADDITIONAL_MASK).val = 24 := by
+                have h24 : (24#u8).val = 24 := rfl
+                simpa [additional, h24] using congrArg UScalar.val hai
+              refine ⟨head, hsome, hmajor', ?_⟩
+              simpa [this] using hsf
+          · have hte :=
+              take_err { buf := self.buf, pos := end1 } 1#usize hbound2
+            rw [hte] at h
+            simp only [bind_tc_ok, lift, let_prod_mk, match_prod_mk,
+        core.result.Result.Insts.CoreOpsTry.branch] at h
+            exact (residual_ne_ok CodecError.UnexpectedEnd
+              { buf := self.buf, pos := end1 } rdr n h).elim
+        · have hai : additional = 25#u8 := by
+            apply UScalar.val_eq_imp
+            have : (25#u8).val = 25 := rfl
+            omega
+          have hai_val : (head &&& ADDITIONAL_MASK).val = 25 := by
+            have h25 : (25#u8).val = 25 := rfl
+            simpa [additional, h25] using congrArg UScalar.val hai
+          simp [hai] at h
+          obtain ⟨out2, self2, -, hlen2, h⟩ := peel_take_continue h
+          have h := peel_get_u8_continue (i := 0#usize) (hi := by simp [hlen2]) h
+          have h := peel_get_u8_continue (i := 1#usize) (hi := by simp [hlen2]) h
+          try simp only [lift, bind_tc_ok] at h
+          have hbounds := min_width_if_u8 _ self2 rdr n (from_u16_le_max _) h
+          refine ⟨head, hsome, hmajor', ?_⟩
+          simpa [hai_val] using smallest_form_ai25 n hbounds.1 hbounds.2
+        · have hai : additional = 26#u8 := by
+            apply UScalar.val_eq_imp
+            have : (26#u8).val = 26 := rfl
+            omega
+          have hai_val : (head &&& ADDITIONAL_MASK).val = 26 := by
+            have h26 : (26#u8).val = 26 := rfl
+            simpa [additional, h26] using congrArg UScalar.val hai
+          simp [hai] at h
+          obtain ⟨out2, self2, -, hlen2, h⟩ := peel_take_continue h
+          have h := peel_get_u8_continue (i := 0#usize) (hi := by simp [hlen2]) h
+          have h := peel_get_u8_continue (i := 1#usize) (hi := by simp [hlen2]) h
+          have h := peel_get_u8_continue (i := 2#usize) (hi := by simp [hlen2]) h
+          have h := peel_get_u8_continue (i := 3#usize) (hi := by simp [hlen2]) h
+          try simp only [lift, bind_tc_ok] at h
+          have hbounds := min_width_if_u16 _ self2 rdr n (from_u32_le_max _) h
+          refine ⟨head, hsome, hmajor', ?_⟩
+          simpa [hai_val] using smallest_form_ai26 n hbounds.1 hbounds.2
+        · have hai : additional = 27#u8 := by
+            apply UScalar.val_eq_imp
+            have : (27#u8).val = 27 := rfl
+            omega
+          have hai_val : (head &&& ADDITIONAL_MASK).val = 27 := by
+            have h27 : (27#u8).val = 27 := rfl
+            simpa [additional, h27] using congrArg UScalar.val hai
+          simp [hai] at h
+          obtain ⟨out2, self2, -, hlen2, h⟩ := peel_take_continue h
+          have h := peel_get_u8_continue (i := 0#usize) (hi := by simp [hlen2]) h
+          have h := peel_get_u8_continue (i := 1#usize) (hi := by simp [hlen2]) h
+          have h := peel_get_u8_continue (i := 2#usize) (hi := by simp [hlen2]) h
+          have h := peel_get_u8_continue (i := 3#usize) (hi := by simp [hlen2]) h
+          have h := peel_get_u8_continue (i := 4#usize) (hi := by simp [hlen2]) h
+          have h := peel_get_u8_continue (i := 5#usize) (hi := by simp [hlen2]) h
+          have h := peel_get_u8_continue (i := 6#usize) (hi := by simp [hlen2]) h
+          have h := peel_get_u8_continue (i := 7#usize) (hi := by simp [hlen2]) h
+          try simp only [lift, bind_tc_ok] at h
+          have hlo := min_width_if_u32 _ self2 rdr n h
+          refine ⟨head, hsome, hmajor', ?_⟩
+          simpa [hai_val] using smallest_form_ai27 n hlo
+        · -- 28..=31: reserved / indefinite. Reduce the match, then `Err`.
+          have hai : additional = 28#u8 := by
+            apply UScalar.val_eq_imp
+            have : (28#u8).val = 28 := rfl
+            omega
+          simp [hai] at h
+          conv at h =>
+            lhs
+            whnf
+          rw [decLe_rec_eq_ite] at h
+          split at h <;> (try split at h) <;>
+            exact (ok_err_ne_ok _ _ _ _ h).elim
+        · have hai : additional = 29#u8 := by
+            apply UScalar.val_eq_imp
+            have : (29#u8).val = 29 := rfl
+            omega
+          simp [hai] at h
+          conv at h =>
+            lhs
+            whnf
+          rw [decLe_rec_eq_ite] at h
+          split at h <;> (try split at h) <;>
+            exact (ok_err_ne_ok _ _ _ _ h).elim
+        · have hai : additional = 30#u8 := by
+            apply UScalar.val_eq_imp
+            have : (30#u8).val = 30 := rfl
+            omega
+          simp [hai] at h
+          conv at h =>
+            lhs
+            whnf
+          rw [decLe_rec_eq_ite] at h
+          split at h <;> (try split at h) <;>
+            exact (ok_err_ne_ok _ _ _ _ h).elim
+        · have hai : additional = 31#u8 := by
+            apply UScalar.val_eq_imp
+            have : (31#u8).val = 31 := rfl
+            omega
+          simp [hai] at h
+          conv at h =>
+            lhs
+            whnf
+          rw [decLe_rec_eq_ite] at h
+          split at h <;> (try split at h) <;>
+            exact (ok_err_ne_ok _ _ _ _ h).elim
+    · exact (ok_err_ne_ok _ _ _ _ h).elim
+  · have hte := take_err self 1#usize hbound
+    unfold Reader.read_head at h
+    rw [hte] at h
+    simp only [bind_tc_ok, lift, let_prod_mk, match_prod_mk,
+        core.result.Result.Insts.CoreOpsTry.branch] at h
+    exact (residual_ne_ok CodecError.UnexpectedEnd self rdr n h).elim
+
+/-- If `read_uint buf` returns `Ok n`, the first byte is major type 0.
+    Additional-info is RFC 8949 §4.2.1 min-width for `n`: 0..=23, 24
+    (`24..=255`), 25 (`256..=65535`), 26 (`65536..=4294967295`), 27
+    (`≥ 4294967296`). The 2/4/8-byte cuts are the `value <= u8::MAX` /
+    `u16::MAX` / `u32::MAX` branches in `read_head`. Reserved 28..=31
+    cannot be `Ok`. Extra-width 1-byte forms such as `[0x18, 0x05]`
+    are `Err(NonCanonicalLength)`, not `Ok`. Not encode-then-decode.
+    Not full RFC 8949. -/
+theorem read_uint_ok_is_canonical (buf : Slice U8) (n : U64)
+    (h : read_uint buf = ok (core.result.Result.Ok n)) :
+    ∃ (head : U8),
+      buf.val[0]? = some head ∧
+      (head &&& MAJOR_MASK) = MAJOR_UNSIGNED ∧
+      SmallestFormAi n (head &&& ADDITIONAL_MASK).val := by
+  simp only [read_uint, Reader.new, Reader.read_uint, lift, bind_tc_ok] at h
+  cases hrh : Reader.read_head { buf := buf, pos := 0#usize } MAJOR_UNSIGNED with
+  | fail _ =>
+    simp [hrh] at h
+  | div =>
+    simp [hrh] at h
+  | ok vr =>
+    rcases vr with ⟨r, rdr⟩
+    simp [hrh, bind_tc_ok] at h
+    obtain ⟨head, hsome, hmajor, hsf⟩ :=
+      read_head_ok_smallest_form { buf := buf, pos := 0#usize } MAJOR_UNSIGNED n rdr
+        (by simp [hrh, h])
+    have h0 : ({ buf := buf, pos := 0#usize } : Reader).pos.val = 0 := rfl
+    refine ⟨head, ?_, hmajor, hsf⟩
+    simpa [h0] using hsome
+
 -- Expected: propext, Classical.choice, Quot.sound. See reports/PROOF.md.
 #print axioms read_uint_no_panic
 #print axioms read_bstr_no_panic
@@ -823,5 +1416,7 @@ theorem read_head_ai0_23_spec (major_base : U8) (arg : U64)
 #print axioms read_head_ai0_23_spec
 #print axioms write_head_ai0_23_eq
 #print axioms take_ok_eq
+#print axioms read_head_ok_smallest_form
+#print axioms read_uint_ok_is_canonical
 
 end NoPanic

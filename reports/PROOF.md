@@ -38,9 +38,36 @@ Layer theorems still hold: `read_uint_no_panic`, `read_bstr_no_panic`,
 Leaves are `@[step]` specs; composites use `step*`; `read_head` is
 `step*` then `split` on the additional-info match.
 
+## Canonicity (`read_uint_ok_is_canonical`)
+
+Decode-only. If `read_uint buf = ok (Result.Ok n)`, the first byte is
+major type 0 and RFC 8949 §4.2.1 additional-info is smallest-form for
+`n`:
+
+- AI 0..=23: `n = ai`
+- AI 24: `24 ≤ n ≤ 255`
+- AI 25: `256 ≤ n ≤ 65535` (u16, not fitting u8)
+- AI 26: `65536 ≤ n ≤ 4294967295` (u32, not fitting u16)
+- AI 27: `n ≥ 4294967296` (not fitting u32)
+
+The 2/4/8-byte cuts are the `value <= u8::MAX` / `u16::MAX` /
+`u32::MAX` branches in `read_head`, unfolded in
+`read_head_ok_smallest_form`. Reserved 28..=31 cannot be `Ok`.
+Extra-width `[0x18, 0x05]` is `Err(NonCanonicalLength)`, not `Ok`.
+`read_head_ai0_23` is the converse on 1-byte heads.
+
+Does **not** claim: full RFC 8949, or encode-then-decode (`write_head`
+then `read_head`).
+
+Theorems: `NoPanic.read_head_ok_smallest_form`,
+`NoPanic.read_uint_ok_is_canonical`. No `sorry`. Axioms: `propext`,
+`Classical.choice`, `Quot.sound` (same as `read_uint_no_panic`).
+Only handwritten `lean/NoPanic.lean` changed; `PROOF.sha256` of
+Rust/llbc/generated Lean is unchanged.
+
 ## Live run
 
-Crate **0.16.0**. Pins: Charon `909ff09a` v0.1.220, Aeneas `c2015b86`,
+Crate **0.17.0**. Pins: Charon `909ff09a` v0.1.220, Aeneas `c2015b86`,
 Lean 4.31.0. `Debug` is `#[cfg_attr(test, derive(Debug))]` so Charon
 does not extract `core.fmt`. Generated Lean has no `CoreFmtDebug`.
 
@@ -52,8 +79,8 @@ on it.
 ```
 $ shasum -a 256 rust/src/lib.rs rust/Cargo.toml rust/Cargo.lock
 9fe042cbe12eac3b75f1f79b0889c35abdb844b1ad901ca642d0b8be537063e1  rust/src/lib.rs
-c11ad3676b0ff66df11373d759422cc64390e772d710582df060bcfab8711ade  rust/Cargo.toml
-295d693efcb9bd2a8209ea1a23fdbd93ae4f314a1d0b9f4bee2265a189df3b98  rust/Cargo.lock
+86deeb84fdfcb00317d445ef4c658da32783854bda5eda7509cd5e1923c33d53  rust/Cargo.toml
+c28273dfeca7732d4c63dd53ab5000d1031c2dfb73494ce7ee0983bcbca7da5e  rust/Cargo.lock
 ```
 
 ### `cargo test`
