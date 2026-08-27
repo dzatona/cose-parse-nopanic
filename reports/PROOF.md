@@ -1,77 +1,310 @@
-# PROOF — `read_uint_no_panic` (step 1)
-
-Historical layer-1 transcript. The crate was later renamed
-`cbor_nopanic` → `cose_parse_nopanic`; commands below are verbatim.
+# PROOF — `parse_sign1_no_panic` (finale)
 
 ## Claim
 
-For every hostile byte slice, the extracted canonical-CBOR unsigned-integer
-decoder returns in the Aeneas `ok` monad. It does **not** prove RFC 8949
-correctness.
+For every hostile byte slice, the extracted `COSE_Sign1` envelope parse
+(`verify` minus crypto) returns in the Aeneas `ok` monad. It does **not**
+prove RFC 9052 / RFC 9053 correctness, Ed25519, or product `Typ` meaning.
 
 ```
-∀ buf, ∃ r, read_uint buf = ok r
+∀ bytes, ∃ r, parse_sign1 bytes = ok r
 ```
 
-`ok (Result.Ok value)` is a canonical uint. `ok (Result.Err CodecError)` is a
-normal codec rejection (truncated, wrong major type, non-canonical length,
-reserved additional, indefinite). `fail` would be panic / OOB / unwrap.
+`ok` includes `Err(CoseError)`. `ok (Result.Ok Parsed)` is kid + typ +
+payload after envelope + protected header + `Sig_structure`.
+`ok (Result.Err CoseError)` is a normal rejection:
 
-Theorem: `NoPanic.read_uint_no_panic` in `lean/NoPanic.lean`. No `sorry`.
+- array count ≠ 4 → `MalformedEnvelope`
+- unprotected map nonempty → `NonEmptyUnprotectedHeader`
+- protected map not `{1:-8, 4:kid16, 100:typ}` → `MalformedProtectedHeader`
+  / `UnsupportedAlgorithm` / `UnknownTyp`
+- truncated / trailing / non-canonical slots → `Codec(...)`
+- reconstructed `Sig_structure` does not fit `[u8; 4096]` →
+  `Codec(BufferTooSmall)`
 
-## Checklist
+`fail` would be panic / OOB / unwrap.
 
-1. `cargo test` in `rust/` — 6/6 green (canonical 0/23/24/255/…, non-canonical
-   `[0x18, 0x05]`, empty → `UnexpectedEnd`, major ≠ 0 → `TypeMismatch`).
-   Transcript below.
-2. Charon exit 0 — `llbc/cbor_nopanic.llbc` (`charon cargo --preset=aeneas`).
-3. Aeneas exit 0 — `lean/CborNopanic.lean`; `lake build` typechecks.
-4. Theorem `read_uint_no_panic` without `sorry`.
-5. `#print axioms` (below). Only standard Lean axioms.
-6. `EXTRACT.md` covers `reader.rs`, the Aeneas remodel, and source provenance.
-7. README states the claim and reproduce commands.
-8. Repo remains private. Transcript below.
+Not `∀ pubkey`. Not `SignatureInvalid` / `InvalidPublicKey`. Those are
+dalek, outside `parse_sign1`.
 
-`CborNopanic.lean` is Aeneas-generated. `NoPanic.lean` is handwritten and was
-not overwritten by the Aeneas dest pass.
+Theorem in `lean/NoPanic.lean`:
 
-## Live re-run (2026-08-26T07:25Z)
+- `NoPanic.parse_sign1_no_panic`
 
-Independent of the previous `llbc/` / `CborNopanic.lean` timestamps. Pins:
+No `sorry`. Layer-1 `read_uint_no_panic`, layer-2 `read_bstr_no_panic` /
+`read_bstr_fixed_64_no_panic`, layer-3 `read_array_header_no_panic` /
+`read_map_header_no_panic` / `read_sign1_envelope_no_panic`, layer-4
+`decode_protected_header_no_panic`, and layer-5
+`build_sig_structure_no_panic` are unchanged and still hold. The finale
+only composes them.
+
+## Live run (2026-08-26)
+
+Pins match `TOOLCHAIN.md`: Charon `909ff09a` v0.1.220, Aeneas `c2015b86`,
+Lean 4.31.0. Ran against crate **0.11.0**. Charon compile line below is
+`cbor_nopanic v0.11.0`, matching `rust/Cargo.toml`.
+
+### Inputs (sha256, before Charon)
 
 ```
-charon version
-0.1.220
-exit:0
-charon HEAD 909ff09ad0f144f83d354f2c3d26f631fb9f8e9a
-
-aeneas -version
-aeneas c2015b86
-exit:0
-aeneas HEAD c2015b8668ba6d5b41f5f19d00a881c12bbb0b5d
-
-ocaml 5.3.0 (opam switch 5.3.0)
+$ shasum -a 256 rust/src/lib.rs rust/Cargo.toml rust/Cargo.lock
+afc9537577a305c668f343fc94cc6f90fb655019c827c8521e129da1795cbbb4  rust/src/lib.rs
+9879da73952c6fab36ac6169a620a5e197ae00794ecadc94bddc64fe42391979  rust/Cargo.toml
+b7cc72a6c002cfbc1af93c5e3533e8b9fd5eca8f0fb0206be917c537755259e0  rust/Cargo.lock
 ```
 
-### `cargo test` (`rust/`, current tree — checklist 1)
+These hashes bind the transcripts and output artifacts below to this tree.
+
+Source provenance (read-only kntrl-org, not copied as a tree) is in
+`EXTRACT.md` finale: `cose/mod.rs` at
+`206ec5ecab0f579d538eac7897434d9a2f43f058`, sha256
+`8abf884d28ee63c28ff5f85aba99e74cc662c52462741d180d9ca20a2e0a7a28`.
+`verify` 221–239 + 248 quoted there; CUT 241–246.
+
+### `cargo test` (`rust/`)
 
 ```
 $ cargo test
-   Compiling cbor_nopanic v0.3.0 (/Users/dzatona/Sites/MacExchange/cose-parse-nopanic/rust)
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.73s
-     Running unittests src/lib.rs (target/debug/deps/cbor_nopanic-b161ad2e7f35305c)
+   Compiling cbor_nopanic v0.11.0 (/Users/dzatona/Sites/MacExchange/cose-parse-nopanic/rust)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.57s
+     Running unittests src/lib.rs (target/debug/deps/cbor_nopanic-40b8f28059b60570)
 
-running 6 tests
+running 46 tests
+test tests::should_decode_canonical_array_header_count_4 ... ok
+test tests::should_change_sig_structure_for_each_typ_aad ... ok
+test tests::should_decode_canonical_protected_header ... ok
+test tests::should_decode_empty_map_header ... ok
+test tests::should_decode_canonical_bstr ... ok
+test tests::should_decode_fixed_64_bstr ... ok
+test tests::should_decode_minimal_sign1_envelope ... ok
 test tests::should_decode_uint_smallest_form_boundaries ... ok
+test tests::should_encode_empty_sig_structure ... ok
+test tests::should_encode_tiny_protected_and_payload ... ok
+test tests::should_parse_canonical_sign1 ... ok
+test tests::should_reject_empty_array_header_input ... ok
+test tests::should_reject_empty_bstr_input ... ok
 test tests::should_reject_empty_input ... ok
-test tests::should_reject_non_canonical_uint_length ... ok
+test tests::should_reject_fixed_64_wrong_length_after_full_body ... ok
+test tests::should_reject_kid_wrong_length ... ok
+test tests::should_reject_major_type_not_array ... ok
+test tests::should_reject_major_type_not_bstr ... ok
 test tests::should_reject_major_type_not_unsigned ... ok
+test tests::should_reject_non_canonical_array_header ... ok
+test tests::should_reject_non_canonical_bstr_length ... ok
+test tests::should_reject_non_canonical_uint_length ... ok
+test tests::should_reject_oversized_sig_structure_payload ... ok
+test tests::should_reject_parse_bad_protected_header ... ok
+test tests::should_reject_parse_malformed_envelope ... ok
+test tests::should_reject_parse_nonempty_unprotected ... ok
+test tests::should_reject_parse_oversized_sig_structure ... ok
+test tests::should_reject_parse_truncated_and_trailing ... ok
+test tests::should_reject_protected_header_duplicate_key ... ok
+test tests::should_reject_protected_header_keys_out_of_order ... ok
+test tests::should_reject_protected_header_trailing_bytes ... ok
+test tests::should_reject_protected_header_wrong_map_count ... ok
+test tests::should_reject_protected_header_unsupported_alg ... ok
+test tests::should_reject_reserved_and_indefinite_bstr ... ok
 test tests::should_reject_reserved_and_indefinite_additional ... ok
+test tests::should_reject_sign1_count_not_4 ... ok
+test tests::should_reject_sign1_nonempty_unprotected ... ok
+test tests::should_reject_sign1_trailing_bytes ... ok
+test tests::should_reject_truncated_array_header ... ok
+test tests::should_reject_truncated_bstr_body ... ok
+test tests::should_reject_truncated_bstr_header ... ok
 test tests::should_reject_truncated_extra_length ... ok
+test tests::should_reject_truncated_fixed_64_body ... ok
+test tests::should_reject_truncated_kid_body ... ok
+test tests::should_reject_truncated_sign1_slots ... ok
+test tests::should_reject_unknown_typ ... ok
 
-test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 46 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
    Doc-tests cbor_nopanic
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+CARGO_TEST_EXIT:0
+```
+
+Layers 1–5 tests remain green. New tests go through `parse_sign1`:
+canonical `{1:-8, 4:kid16, 100:typ}` + 64-byte sig → `Ok` with that
+kid/typ/payload; malformed envelope; nonempty unprotected; bad header
+(`UnknownTyp` / `UnsupportedAlgorithm` / `MalformedProtectedHeader`);
+truncated; trailing; 4096-byte payload → `Codec(BufferTooSmall)`.
+
+### Charon (`rust/`, PATH includes `$HOME/charon/bin`)
+
+Ran against the crate at **0.11.0** (same tree as the input hashes above).
+
+```
+$ charon version
+0.1.220
+
+$ charon cargo --preset=aeneas --dest-file ../llbc/cbor_nopanic.llbc
+   Compiling cbor_nopanic v0.11.0 (/Users/dzatona/Sites/MacExchange/cose-parse-nopanic/rust)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.68s
+CHARON_EXIT:0
+```
+
+### Aeneas (progress bars stripped)
+
+```
+$ eval $(opam env --switch=5.3.0)
+$ ~/aeneas/bin/aeneas -version
+aeneas c2015b86
+
+$ ~/aeneas/bin/aeneas -backend lean -dest ../lean ../llbc/cbor_nopanic.llbc
+[Info ] Imported: ../llbc/cbor_nopanic.llbc
+[Info ] Generated: ../lean/CborNopanic.lean
+[Warn ] The crate contains extracted external, unknown definitions: we advise using the option -split-files to allow manually providing these definitions in separate files.
+[Info ] Total execution time: 2.471610 seconds
+AENEAS_EXIT:0
+```
+
+`NoPanic.lean` and `lakefile.lean` were not rewritten (handwritten
+`NoPanic.lean` kept). Generated Lean has no `axiom` declarations and no
+loop on input length. `parse_sign1` is the three proved helpers plus
+`Ok(Parsed)`.
+
+### Outputs (sha256, after Charon + Aeneas)
+
+```
+$ shasum -a 256 llbc/cbor_nopanic.llbc lean/CborNopanic.lean
+b8d568db77782f5c8945d39286f0a81ffc698b17fb9966238da1ac708f1ae167  llbc/cbor_nopanic.llbc
+352b85460fde4177bc0269b325ed9fd75db5f5fa830466fdf11b7b7cf5106ffc  lean/CborNopanic.lean
+```
+
+### `lake build`
+
+```
+$ cd ../lean && lake build
+info: NoPanic.lean:1168:0: 'NoPanic.read_uint_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:1169:0: 'NoPanic.read_bstr_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:1170:0: 'NoPanic.read_bstr_fixed_64_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:1171:0: 'NoPanic.read_array_header_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:1172:0: 'NoPanic.read_map_header_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:1173:0: 'NoPanic.read_sign1_envelope_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:1174:0: 'NoPanic.decode_protected_header_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:1175:0: 'NoPanic.build_sig_structure_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:1176:0: 'NoPanic.parse_sign1_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+Build completed successfully (1698 jobs).
+LAKE_EXIT:0
+```
+
+Aeneas stdlib replayed `sorry` warnings in unused `get_unchecked` /
+`StringIter` models; they are not in these theorems' axiom sets.
+
+### `#print axioms`
+
+```
+$ lake env lean --stdin <<'EOF'
+import NoPanic
+#print axioms NoPanic.read_uint_no_panic
+#print axioms NoPanic.read_bstr_no_panic
+#print axioms NoPanic.read_bstr_fixed_64_no_panic
+#print axioms NoPanic.read_array_header_no_panic
+#print axioms NoPanic.read_map_header_no_panic
+#print axioms NoPanic.read_sign1_envelope_no_panic
+#print axioms NoPanic.decode_protected_header_no_panic
+#print axioms NoPanic.build_sig_structure_no_panic
+#print axioms NoPanic.parse_sign1_no_panic
+EOF
+'NoPanic.read_uint_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+'NoPanic.read_bstr_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+'NoPanic.read_bstr_fixed_64_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+'NoPanic.read_array_header_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+'NoPanic.read_map_header_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+'NoPanic.read_sign1_envelope_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+'NoPanic.decode_protected_header_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+'NoPanic.build_sig_structure_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+'NoPanic.parse_sign1_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+AXIOMS_EXIT:0
+```
+
+These are the three standard Lean axioms. No `sorryAx`, no opaque
+`size_of`, no unknown-external axioms. No new file in `reports/AXIOMS.md`.
+No `reports/STOP.md`.
+
+## Addendum — crate rename (2026-08-26)
+
+Rust crate, Charon dest, and Lean namespace are `cose_parse_nopanic`
+**0.15.0**. Theorems unchanged. No `sorry`. Axioms still only
+`propext`, `Classical.choice`, `Quot.sound`. Pins unchanged.
+
+### Inputs (sha256, before Charon)
+
+```
+$ shasum -a 256 rust/src/lib.rs rust/Cargo.toml rust/Cargo.lock
+afe2ce13f3a2d0f716bd895d862d62ff757208907bbecce6ff3905349c6e6b8a  rust/src/lib.rs
+4ef3cb5678a432e5952565e3021790a57afe5d1268db2a38c74cc8a875298820  rust/Cargo.toml
+79f97181da7f9202f56379d974d1c3e4b6946a627d3e75ba691c6e056105e28b  rust/Cargo.lock
+```
+
+`lib.rs` after a comment-only edit (dropped internal spec section
+refs). Cargo files unchanged from the rename run. LLBC/Lean output
+hashes below are from that Charon/Aeneas pass, not re-extracted.
+
+### `cargo test` (`rust/`)
+
+```
+$ cargo test
+   Compiling cose_parse_nopanic v0.15.0 (/Users/dzatona/Sites/MacExchange/cose-parse-nopanic/rust)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.68s
+     Running unittests src/lib.rs (target/debug/deps/cose_parse_nopanic-03857eda2d61af0b)
+
+running 46 tests
+test tests::should_decode_canonical_array_header_count_4 ... ok
+test tests::should_decode_canonical_bstr ... ok
+test tests::should_change_sig_structure_for_each_typ_aad ... ok
+test tests::should_decode_canonical_protected_header ... ok
+test tests::should_decode_empty_map_header ... ok
+test tests::should_decode_fixed_64_bstr ... ok
+test tests::should_decode_uint_smallest_form_boundaries ... ok
+test tests::should_decode_minimal_sign1_envelope ... ok
+test tests::should_encode_empty_sig_structure ... ok
+test tests::should_encode_tiny_protected_and_payload ... ok
+test tests::should_parse_canonical_sign1 ... ok
+test tests::should_reject_empty_array_header_input ... ok
+test tests::should_reject_empty_bstr_input ... ok
+test tests::should_reject_empty_input ... ok
+test tests::should_reject_fixed_64_wrong_length_after_full_body ... ok
+test tests::should_reject_kid_wrong_length ... ok
+test tests::should_reject_major_type_not_array ... ok
+test tests::should_reject_major_type_not_bstr ... ok
+test tests::should_reject_major_type_not_unsigned ... ok
+test tests::should_reject_non_canonical_array_header ... ok
+test tests::should_reject_non_canonical_bstr_length ... ok
+test tests::should_reject_non_canonical_uint_length ... ok
+test tests::should_reject_oversized_sig_structure_payload ... ok
+test tests::should_reject_parse_bad_protected_header ... ok
+test tests::should_reject_parse_malformed_envelope ... ok
+test tests::should_reject_parse_nonempty_unprotected ... ok
+test tests::should_reject_parse_oversized_sig_structure ... ok
+test tests::should_reject_parse_truncated_and_trailing ... ok
+test tests::should_reject_protected_header_duplicate_key ... ok
+test tests::should_reject_protected_header_keys_out_of_order ... ok
+test tests::should_reject_protected_header_trailing_bytes ... ok
+test tests::should_reject_protected_header_unsupported_alg ... ok
+test tests::should_reject_protected_header_wrong_map_count ... ok
+test tests::should_reject_reserved_and_indefinite_additional ... ok
+test tests::should_reject_reserved_and_indefinite_bstr ... ok
+test tests::should_reject_sign1_count_not_4 ... ok
+test tests::should_reject_sign1_nonempty_unprotected ... ok
+test tests::should_reject_truncated_array_header ... ok
+test tests::should_reject_truncated_bstr_body ... ok
+test tests::should_reject_truncated_bstr_header ... ok
+test tests::should_reject_sign1_trailing_bytes ... ok
+test tests::should_reject_truncated_extra_length ... ok
+test tests::should_reject_truncated_fixed_64_body ... ok
+test tests::should_reject_truncated_sign1_slots ... ok
+test tests::should_reject_unknown_typ ... ok
+test tests::should_reject_truncated_kid_body ... ok
+
+test result: ok. 46 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests cose_parse_nopanic
 
 running 0 tests
 
@@ -83,90 +316,370 @@ CARGO_TEST_EXIT:0
 ### Charon (`rust/`, PATH includes `$HOME/charon/bin`)
 
 ```
-$ charon cargo --preset=aeneas --dest-file ../llbc/cbor_nopanic.llbc
-   Compiling cbor_nopanic v0.1.0 (/Users/dzatona/Sites/MacExchange/cbor-nopanic/rust)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.84s
+$ charon version
+0.1.220
+
+$ charon cargo --preset=aeneas --dest-file ../llbc/cose_parse_nopanic.llbc
+   Compiling cose_parse_nopanic v0.15.0 (/Users/dzatona/Sites/MacExchange/cose-parse-nopanic/rust)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.77s
 CHARON_EXIT:0
 ```
-
-`llbc/cbor_nopanic.llbc` sha256 after this pass:
-`4d054fe59eb7ba2782b8df927959d5604a793500bd1ed2145cbf19a391b8c652`
-(pre-run sha256 was `6bc72744e180a9d6cb87131c59564fef8ede23cbc08a8f43e2e07a8e09f2ec1d`;
-Charon is not bit-stable on re-run).
-Crate version is now `0.3.0` after later feat bumps; the live `cargo test` above
-is against the current tree. Historical Charon hashes are not rewritten.
 
 ### Aeneas (progress bars stripped)
 
 ```
 $ eval $(opam env --switch=5.3.0)
-$ ~/aeneas/bin/aeneas -backend lean -dest ../lean ../llbc/cbor_nopanic.llbc
-[Info ] Imported: ../llbc/cbor_nopanic.llbc
-[Info ] Generated: ../lean/CborNopanic.lean
+$ ~/aeneas/bin/aeneas -version
+aeneas c2015b86
+
+$ ~/aeneas/bin/aeneas -backend lean -dest ../lean ../llbc/cose_parse_nopanic.llbc
+[Info ] Imported: ../llbc/cose_parse_nopanic.llbc
+[Info ] Generated: ../lean/CoseParseNopanic.lean
 [Warn ] The crate contains extracted external, unknown definitions: we advise using the option -split-files to allow manually providing these definitions in separate files.
-[Info ] Total execution time: 1.229207 seconds
+[Info ] Total execution time: 2.544582 seconds
 AENEAS_EXIT:0
 ```
 
-`lean/CborNopanic.lean` sha256 unchanged:
-`9d1da8ce885c0fc8ff333a8694cfefe094ddf42cc33725c0247a96f6af962ba3`
-`NoPanic.lean` and `lakefile.lean` were not rewritten.
+`NoPanic.lean` and `lakefile.lean` were not rewritten (handwritten
+`NoPanic.lean` kept; `import` / `open` updated to the new module).
+
+### Outputs (sha256, after Charon + Aeneas)
+
+```
+$ shasum -a 256 llbc/cose_parse_nopanic.llbc lean/CoseParseNopanic.lean
+91c49e22356ad2bc9a27a2b8f83673b24345661586c6a8273e9a76a148587533  llbc/cose_parse_nopanic.llbc
+bdf30b6b1bcbf2d5eecd9418b5acda43558dded6414bbcb0cc67f2d002dd9536  lean/CoseParseNopanic.lean
+```
 
 ### `lake build`
 
 ```
 $ cd ../lean && lake build
-info: NoPanic.lean:362:0: 'NoPanic.read_uint_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+⚠ [1513/1698] Replayed Aeneas.Std.Slice
+warning: Aeneas/Std/Slice.lean:363:4: declaration uses `sorry`
+warning: Aeneas/Std/Slice.lean:586:8: declaration uses `sorry`
+⚠ [1592/1698] Replayed Aeneas.Std.StringIter
+warning: Aeneas/Std/StringIter.lean:13:4: declaration uses `sorry`
+✔ [1695/1698] Built CoseParseNopanic (13s)
+ℹ [1697/1698] Built NoPanic (1.0s)
+info: NoPanic.lean:1168:0: 'NoPanic.read_uint_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:1169:0: 'NoPanic.read_bstr_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:1170:0: 'NoPanic.read_bstr_fixed_64_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:1171:0: 'NoPanic.read_array_header_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:1172:0: 'NoPanic.read_map_header_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:1173:0: 'NoPanic.read_sign1_envelope_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:1174:0: 'NoPanic.decode_protected_header_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:1175:0: 'NoPanic.build_sig_structure_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:1176:0: 'NoPanic.parse_sign1_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
 Build completed successfully (1698 jobs).
 LAKE_EXIT:0
 ```
 
-Aeneas stdlib replayed `sorry` warnings in unused `get_unchecked` / `StringIter`
-models; they are not in this theorem's axiom set. `rg sorry lean/` is empty.
+Aeneas stdlib replayed `sorry` warnings in unused `get_unchecked` /
+`StringIter` models; they are not in these theorems' axiom sets.
 
-### GitHub privacy (checklist 8)
-
-```
-$ gh repo view --json name,isPrivate,url
-{"isPrivate":true,"name":"cose-parse-nopanic","url":"https://github.com/dzatona/cose-parse-nopanic"}
-GH_EXIT:0
-```
-
-Repo remains private.
-
-## `#print axioms` (after the fresh Aeneas pass)
+### `#print axioms`
 
 ```
 $ lake env lean --stdin <<'EOF'
 import NoPanic
 #print axioms NoPanic.read_uint_no_panic
+#print axioms NoPanic.read_bstr_no_panic
+#print axioms NoPanic.read_bstr_fixed_64_no_panic
+#print axioms NoPanic.read_array_header_no_panic
+#print axioms NoPanic.read_map_header_no_panic
+#print axioms NoPanic.read_sign1_envelope_no_panic
+#print axioms NoPanic.decode_protected_header_no_panic
+#print axioms NoPanic.build_sig_structure_no_panic
+#print axioms NoPanic.parse_sign1_no_panic
 EOF
 'NoPanic.read_uint_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+'NoPanic.read_bstr_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+'NoPanic.read_bstr_fixed_64_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+'NoPanic.read_array_header_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+'NoPanic.read_map_header_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+'NoPanic.read_sign1_envelope_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+'NoPanic.decode_protected_header_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+'NoPanic.build_sig_structure_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+'NoPanic.parse_sign1_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
 AXIOMS_EXIT:0
 ```
 
-These are the three standard Lean axioms. No `sorryAx`, no opaque `size_of`,
-no unknown-external axioms. First Aeneas output *did* emit `axiom`s for
-`Option::ok_or`, `slice::first`, `TryFrom<&[u8]> for [u8; N]`, integer
-`TryFrom`, and `Result::map_err`. Those were removed by a loop-free Rust
-remodel (`// REMODEL:` in `rust/src/lib.rs`): `match` on `checked_add` /
-`slice::get` instead of `ok_or`/`first`/`try_into`. Semantics of the test
-vectors are unchanged.
+## Addendum — re-extract after comment-only edit (2026-08-26)
+
+Crate **0.15.0**. Input `lib.rs` is `afe2ce…` (comment-only).
+The previous addendum's LLBC still embedded the older `lib.rs` comments.
+This pass re-ran Charon + Aeneas + `lake` against the current tree.
+Theorems unchanged. No `sorry`. Axioms still only `propext`,
+`Classical.choice`, `Quot.sound`. Pins unchanged.
+
+### Inputs (sha256, before Charon)
+
+```
+$ shasum -a 256 rust/src/lib.rs rust/Cargo.toml rust/Cargo.lock
+afe2ce13f3a2d0f716bd895d862d62ff757208907bbecce6ff3905349c6e6b8a  rust/src/lib.rs
+4ef3cb5678a432e5952565e3021790a57afe5d1268db2a38c74cc8a875298820  rust/Cargo.toml
+79f97181da7f9202f56379d974d1c3e4b6946a627d3e75ba691c6e056105e28b  rust/Cargo.lock
+```
+
+`rg` on `rust/src/lib.rs` and `lean/NoPanic.lean` is empty for the
+dropped comment markers.
+
+### `cargo test` (`rust/`)
+
+```
+$ cargo test
+   Compiling cose_parse_nopanic v0.15.0 (/Users/dzatona/Sites/MacExchange/cose-parse-nopanic/rust)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.45s
+     Running unittests src/lib.rs (target/debug/deps/cose_parse_nopanic-03857eda2d61af0b)
+
+running 46 tests
+test tests::should_decode_canonical_array_header_count_4 ... ok
+test tests::should_change_sig_structure_for_each_typ_aad ... ok
+test tests::should_decode_empty_map_header ... ok
+test tests::should_decode_minimal_sign1_envelope ... ok
+test tests::should_decode_uint_smallest_form_boundaries ... ok
+test tests::should_decode_canonical_bstr ... ok
+test tests::should_encode_empty_sig_structure ... ok
+test tests::should_decode_canonical_protected_header ... ok
+test tests::should_encode_tiny_protected_and_payload ... ok
+test tests::should_decode_fixed_64_bstr ... ok
+test tests::should_parse_canonical_sign1 ... ok
+test tests::should_reject_empty_array_header_input ... ok
+test tests::should_reject_empty_bstr_input ... ok
+test tests::should_reject_empty_input ... ok
+test tests::should_reject_fixed_64_wrong_length_after_full_body ... ok
+test tests::should_reject_kid_wrong_length ... ok
+test tests::should_reject_major_type_not_array ... ok
+test tests::should_reject_major_type_not_bstr ... ok
+test tests::should_reject_major_type_not_unsigned ... ok
+test tests::should_reject_non_canonical_array_header ... ok
+test tests::should_reject_non_canonical_bstr_length ... ok
+test tests::should_reject_non_canonical_uint_length ... ok
+test tests::should_reject_oversized_sig_structure_payload ... ok
+test tests::should_reject_parse_bad_protected_header ... ok
+test tests::should_reject_parse_malformed_envelope ... ok
+test tests::should_reject_parse_nonempty_unprotected ... ok
+test tests::should_reject_parse_oversized_sig_structure ... ok
+test tests::should_reject_parse_truncated_and_trailing ... ok
+test tests::should_reject_protected_header_duplicate_key ... ok
+test tests::should_reject_protected_header_keys_out_of_order ... ok
+test tests::should_reject_protected_header_trailing_bytes ... ok
+test tests::should_reject_protected_header_unsupported_alg ... ok
+test tests::should_reject_protected_header_wrong_map_count ... ok
+test tests::should_reject_reserved_and_indefinite_additional ... ok
+test tests::should_reject_reserved_and_indefinite_bstr ... ok
+test tests::should_reject_sign1_count_not_4 ... ok
+test tests::should_reject_sign1_nonempty_unprotected ... ok
+test tests::should_reject_sign1_trailing_bytes ... ok
+test tests::should_reject_truncated_array_header ... ok
+test tests::should_reject_truncated_bstr_body ... ok
+test tests::should_reject_truncated_bstr_header ... ok
+test tests::should_reject_truncated_extra_length ... ok
+test tests::should_reject_truncated_fixed_64_body ... ok
+test tests::should_reject_truncated_kid_body ... ok
+test tests::should_reject_truncated_sign1_slots ... ok
+test tests::should_reject_unknown_typ ... ok
+
+test result: ok. 46 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests cose_parse_nopanic
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+CARGO_TEST_EXIT:0
+```
+
+### Charon (`rust/`, PATH includes `$HOME/charon/bin`)
+
+```
+$ charon version
+0.1.220
+
+$ charon cargo --preset=aeneas --dest-file ../llbc/cose_parse_nopanic.llbc
+   Compiling cose_parse_nopanic v0.15.0 (/Users/dzatona/Sites/MacExchange/cose-parse-nopanic/rust)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.78s
+CHARON_EXIT:0
+```
+
+### Aeneas (progress bars stripped)
+
+```
+$ eval $(opam env --switch=5.3.0)
+$ ~/aeneas/bin/aeneas -version
+aeneas c2015b86
+
+$ ~/aeneas/bin/aeneas -backend lean -dest ../lean ../llbc/cose_parse_nopanic.llbc
+[Info ] Imported: ../llbc/cose_parse_nopanic.llbc
+[Info ] Generated: ../lean/CoseParseNopanic.lean
+[Warn ] The crate contains extracted external, unknown definitions: we advise using the option -split-files to allow manually providing these definitions in separate files.
+[Info ] Total execution time: 2.561455 seconds
+AENEAS_EXIT:0
+```
+
+Handwritten `NoPanic.lean` was not overwritten. Generated Lean is
+byte-identical to the rename pass (comments are not extracted).
+Those comment markers are absent from `llbc/cose_parse_nopanic.llbc`
+and `lean/CoseParseNopanic.lean`.
+
+### Outputs (sha256, after Charon + Aeneas)
+
+```
+$ shasum -a 256 llbc/cose_parse_nopanic.llbc lean/CoseParseNopanic.lean
+87746bb17e3c2ad01ad77f561e9b44d7dcb069bd547b7838bbca89694ca88ab0  llbc/cose_parse_nopanic.llbc
+bdf30b6b1bcbf2d5eecd9418b5acda43558dded6414bbcb0cc67f2d002dd9536  lean/CoseParseNopanic.lean
+```
+
+### `lake build`
+
+```
+$ cd ../lean && lake build
+⚠ [1513/1698] Replayed Aeneas.Std.Slice
+warning: Aeneas/Std/Slice.lean:363:4: declaration uses `sorry`
+warning: Aeneas/Std/Slice.lean:586:8: declaration uses `sorry`
+⚠ [1592/1698] Replayed Aeneas.Std.StringIter
+warning: Aeneas/Std/StringIter.lean:13:4: declaration uses `sorry`
+ℹ [1697/1698] Built NoPanic (31s)
+info: NoPanic.lean:1168:0: 'NoPanic.read_uint_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:1169:0: 'NoPanic.read_bstr_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:1170:0: 'NoPanic.read_bstr_fixed_64_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:1171:0: 'NoPanic.read_array_header_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:1172:0: 'NoPanic.read_map_header_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:1173:0: 'NoPanic.read_sign1_envelope_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:1174:0: 'NoPanic.decode_protected_header_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:1175:0: 'NoPanic.build_sig_structure_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:1176:0: 'NoPanic.parse_sign1_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+Build completed successfully (1698 jobs).
+LAKE_EXIT:0
+```
+
+Aeneas stdlib replayed `sorry` warnings in unused `get_unchecked` /
+`StringIter` models; they are not in these theorems' axiom sets.
+
+### `#print axioms`
+
+```
+$ lake env lean --stdin <<'EOF'
+import NoPanic
+#print axioms NoPanic.parse_sign1_no_panic
+EOF
+'NoPanic.parse_sign1_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+AXIOMS_EXIT:0
+```
+
+## Addendum — re-extract after RFC citation (2026-08-26)
+
+Crate **0.15.0**. rustdoc now cites RFC 9052 (not 8152). This pass
+re-ran Charon + Aeneas + `lake` so LLBC embeds the current source.
+Theorems unchanged. No `sorry`. Axioms still only `propext`,
+`Classical.choice`, `Quot.sound`. Pins unchanged.
+
+### Inputs (sha256, before Charon)
+
+```
+$ shasum -a 256 rust/src/lib.rs rust/Cargo.toml rust/Cargo.lock
+965c3236e2b385691a6655f362fc6a7ceab185c59ff6e07ee901c0c31c4fc356  rust/src/lib.rs
+6a6c27d37a19fba49790c90f8bc247a1ab95aad827078c310fa77bc97c3486e4  rust/Cargo.toml
+79f97181da7f9202f56379d974d1c3e4b6946a627d3e75ba691c6e056105e28b  rust/Cargo.lock
+```
+
+`rg 8152 rust/src/lib.rs llbc lean/*.lean reports/*.md` is empty.
+
+### `cargo test` (`rust/`)
+
+```
+$ cargo test
+   Compiling cose_parse_nopanic v0.15.0 (/Users/dzatona/Sites/MacExchange/cose-parse-nopanic/rust)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.67s
+test result: ok. 46 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+CARGO_TEST_EXIT:0
+```
+
+### Charon (`rust/`, PATH includes `$HOME/charon/bin`)
+
+```
+$ charon version
+0.1.220
+
+$ charon cargo --preset=aeneas --dest-file ../llbc/cose_parse_nopanic.llbc
+   Compiling cose_parse_nopanic v0.15.0 (/Users/dzatona/Sites/MacExchange/cose-parse-nopanic/rust)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.68s
+CHARON_EXIT:0
+```
+
+### Aeneas (progress bars stripped)
+
+```
+$ eval $(opam env --switch=5.3.0)
+$ ~/aeneas/bin/aeneas -version
+aeneas c2015b86
+
+$ ~/aeneas/bin/aeneas -backend lean -dest ../lean ../llbc/cose_parse_nopanic.llbc
+[Info ] Imported: ../llbc/cose_parse_nopanic.llbc
+[Info ] Generated: ../lean/CoseParseNopanic.lean
+[Warn ] The crate contains extracted external, unknown definitions: we advise using the option -split-files to allow manually providing these definitions in separate files.
+[Info ] Total execution time: 2.455992 seconds
+AENEAS_EXIT:0
+```
+
+Handwritten `NoPanic.lean` was not overwritten. Generated Lean is
+byte-identical to the previous extract (rustdoc is not extracted into
+Lean). LLBC now embeds RFC 9052.
+
+### Outputs (sha256, after Charon + Aeneas)
+
+```
+$ shasum -a 256 llbc/cose_parse_nopanic.llbc lean/CoseParseNopanic.lean
+8492e4febd91b91dde91776763ba4a6721563a63689ad53d53d302cee0bc7214  llbc/cose_parse_nopanic.llbc
+bdf30b6b1bcbf2d5eecd9418b5acda43558dded6414bbcb0cc67f2d002dd9536  lean/CoseParseNopanic.lean
+```
+
+### `lake build`
+
+```
+$ cd ../lean && lake build
+Build completed successfully (1698 jobs).
+LAKE_EXIT:0
+```
+
+Aeneas stdlib replayed `sorry` warnings in unused `get_unchecked` /
+`StringIter` models; they are not in these theorems' axiom sets.
+
+### `#print axioms`
+
+```
+$ lake env lean --stdin <<'EOF'
+import NoPanic
+#print axioms NoPanic.parse_sign1_no_panic
+EOF
+'NoPanic.parse_sign1_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+AXIOMS_EXIT:0
+```
 
 ## Reproduce
 
 ```sh
+shasum -a 256 rust/src/lib.rs rust/Cargo.toml rust/Cargo.lock
 cd rust && cargo test
 export PATH="$HOME/charon/bin:$PATH"
 charon cargo --preset=aeneas --dest-file ../llbc/cose_parse_nopanic.llbc
 eval $(opam env --switch=5.3.0)
 ~/aeneas/bin/aeneas -backend lean -dest ../lean ../llbc/cose_parse_nopanic.llbc
+shasum -a 256 ../llbc/cose_parse_nopanic.llbc ../lean/CoseParseNopanic.lean
 cd ../lean && lake build
 # axioms:
 lake env lean --stdin <<'EOF'
 import NoPanic
-#print axioms NoPanic.read_uint_no_panic
+#print axioms NoPanic.parse_sign1_no_panic
+#print axioms NoPanic.build_sig_structure_no_panic
+#print axioms NoPanic.decode_protected_header_no_panic
+#print axioms NoPanic.read_sign1_envelope_no_panic
 EOF
 ```
 
-See `TOOLCHAIN.md` for pins and install.
+See `TOOLCHAIN.md` for pins and install. Layer-1 claim remains in `PROOF.md`.
+Layer-2 claim remains in `PROOF-bstr.md`. Layer-3 claim remains in
+`PROOF-envelope.md`. Layer-4 claim remains in `PROOF-header.md`. Layer-5
+claim remains in `PROOF-sig.md`.

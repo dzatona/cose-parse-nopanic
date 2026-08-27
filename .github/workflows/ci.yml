@@ -1,0 +1,59 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --manifest-path rust/Cargo.toml
+
+  lean:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: AeneasVerif/aeneas
+          ref: c2015b86
+          path: aeneas
+      - name: Install elan
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf \
+            | sh -s -- -y --default-toolchain leanprover/lean4:v4.31.0
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Build Aeneas Lean lib
+        working-directory: aeneas/backends/lean
+        run: |
+          lake exe cache get
+          lake build Aeneas
+      - name: lake build NoPanic
+        env:
+          AENEAS_LEAN: ${{ github.workspace }}/aeneas/backends/lean
+        working-directory: lean
+        run: lake build
+      - name: Axiom set
+        env:
+          AENEAS_LEAN: ${{ github.workspace }}/aeneas/backends/lean
+        working-directory: lean
+        run: |
+          out=$(lake env lean --stdin <<'EOF'
+          import NoPanic
+          #print axioms NoPanic.parse_sign1_no_panic
+          EOF
+          )
+          echo "$out"
+          echo "$out" | grep -F "propext"
+          echo "$out" | grep -F "Classical.choice"
+          echo "$out" | grep -F "Quot.sound"
+          extra=$(echo "$out" | grep "depends on axioms:" | sed 's/.*\[//;s/\].*//' | tr ',' '\n' | sed 's/^ *//;s/ *$//' | grep -v '^$' | grep -vx 'propext' | grep -vx 'Classical.choice' | grep -vx 'Quot.sound' || true)
+          if [ -n "$extra" ]; then
+            echo "unexpected axioms: $extra"
+            exit 1
+          fi
