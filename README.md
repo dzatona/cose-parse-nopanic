@@ -7,8 +7,11 @@ RFC 9053 correctness.
 Not the KNTRL product tree. Not a Runtime Verification repository.
 Work and name: Dmitrii Zatona. License: Apache-2.0.
 
-**Proved:** for every `&[u8]`, `parse_sign1` returns Aeneas `ok _` — a
-`Parsed` envelope or a normal `CoseError`. It does not panic.
+**Proved:** for every `&[u8]`, `parse_sign1` in **this** crate returns
+Aeneas `ok _` — a `Parsed` envelope or a normal `CoseError`. It does
+not panic. This is an extracted copy of the `verify` pre-crypto path,
+not a proof of `kntrl-license-core` in place. The product does not
+depend on this crate.
 
 That path is: array of 4, protected/payload/signature bstrs, empty
 unprotected map, protected header `{1: -8, 4: kid, 100: typ}`, then
