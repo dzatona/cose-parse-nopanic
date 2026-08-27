@@ -660,6 +660,116 @@ EOF
 AXIOMS_EXIT:0
 ```
 
+## Addendum — Debug derive only in tests (2026-08-26)
+
+Crate **0.15.0**. `CodecError`, `CoseError`, and `Typ` keep
+`Clone + Copy + PartialEq + Eq`; `Debug` is `#[cfg_attr(test, derive(Debug))]`
+so Charon does not extract `core.fmt`. Tests still compile. Generated Lean
+has **no** `core.fmt` / `CoreFmtDebug` (was 43 matches). Theorems unchanged.
+No `sorry`. Axioms still only `propext`, `Classical.choice`, `Quot.sound`.
+Pins unchanged.
+
+### Inputs (sha256, before Charon)
+
+```
+$ shasum -a 256 rust/src/lib.rs rust/Cargo.toml rust/Cargo.lock
+12f6356c89cd8c65a87c0d8c244b842c93a57c8aa3a30290104bdade9d9b783e  rust/src/lib.rs
+6a6c27d37a19fba49790c90f8bc247a1ab95aad827078c310fa77bc97c3486e4  rust/Cargo.toml
+79f97181da7f9202f56379d974d1c3e4b6946a627d3e75ba691c6e056105e28b  rust/Cargo.lock
+```
+
+### `cargo test` (`rust/`)
+
+```
+$ cargo test
+   Compiling cose_parse_nopanic v0.15.0 (/Users/dzatona/Sites/MacExchange/cose-parse-nopanic/rust)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.57s
+test result: ok. 46 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+CARGO_TEST_EXIT:0
+```
+
+### Charon (`rust/`, PATH includes `$HOME/charon/bin`)
+
+```
+$ charon version
+0.1.220
+
+$ charon cargo --preset=aeneas --dest-file ../llbc/cose_parse_nopanic.llbc
+   Compiling cose_parse_nopanic v0.15.0 (/Users/dzatona/Sites/MacExchange/cose-parse-nopanic/rust)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.77s
+CHARON_EXIT:0
+```
+
+### Aeneas (progress bars stripped)
+
+```
+$ eval $(opam env --switch=5.3.0)
+$ ~/aeneas/bin/aeneas -version
+aeneas c2015b86
+
+$ ~/aeneas/bin/aeneas -backend lean -dest ../lean ../llbc/cose_parse_nopanic.llbc
+[Info ] Imported: ../llbc/cose_parse_nopanic.llbc
+[Info ] Generated: ../lean/CoseParseNopanic.lean
+[Warn ] The crate contains extracted external, unknown definitions: we advise using the option -split-files to allow manually providing these definitions in separate files.
+[Info ] Total execution time: 2.149315 seconds
+AENEAS_EXIT:0
+```
+
+Handwritten `NoPanic.lean` was not overwritten. Generated Lean has no
+`CodecError`/`CoseError`/`Typ` `Debug` `fmt`.
+
+### Outputs (sha256, after Charon + Aeneas)
+
+```
+$ shasum -a 256 llbc/cose_parse_nopanic.llbc lean/CoseParseNopanic.lean
+dc13d5679ff3b2ff558b46b726c2f43a2d721ce61bcc5ffb753ce8dfe814fb0d  llbc/cose_parse_nopanic.llbc
+411267ea74ecb7a05ea1a3950a4b9e8f3da41816481a37032cf491539c22f450  lean/CoseParseNopanic.lean
+```
+
+### `lake build`
+
+```
+$ cd ../lean && lake build
+⚠ [1513/1698] Replayed Aeneas.Std.Slice
+warning: Aeneas/Std/Slice.lean:363:4: declaration uses `sorry`
+warning: Aeneas/Std/Slice.lean:586:8: declaration uses `sorry`
+⚠ [1592/1698] Replayed Aeneas.Std.StringIter
+warning: Aeneas/Std/StringIter.lean:13:4: declaration uses `sorry`
+✔ [1695/1698] Built CoseParseNopanic (12s)
+ℹ [1697/1698] Built NoPanic (1.9s)
+info: NoPanic.lean:1168:0: 'NoPanic.read_uint_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:1169:0: 'NoPanic.read_bstr_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:1170:0: 'NoPanic.read_bstr_fixed_64_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:1171:0: 'NoPanic.read_array_header_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:1172:0: 'NoPanic.read_map_header_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:1173:0: 'NoPanic.read_sign1_envelope_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:1174:0: 'NoPanic.decode_protected_header_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:1175:0: 'NoPanic.build_sig_structure_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: NoPanic.lean:1176:0: 'NoPanic.parse_sign1_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+Build completed successfully (1698 jobs).
+LAKE_EXIT:0
+```
+
+Aeneas stdlib replayed `sorry` warnings in unused `get_unchecked` /
+`StringIter` models; they are not in these theorems' axiom sets.
+
+### `#print axioms`
+
+```
+$ lake env lean --stdin <<'EOF'
+import NoPanic
+#print axioms NoPanic.parse_sign1_no_panic
+#print axioms NoPanic.build_sig_structure_no_panic
+#print axioms NoPanic.decode_protected_header_no_panic
+#print axioms NoPanic.read_sign1_envelope_no_panic
+EOF
+'NoPanic.parse_sign1_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+'NoPanic.build_sig_structure_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+'NoPanic.decode_protected_header_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+'NoPanic.read_sign1_envelope_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+AXIOMS_EXIT:0
+```
+
 ## Reproduce
 
 ```sh
