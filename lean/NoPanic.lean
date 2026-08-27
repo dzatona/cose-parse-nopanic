@@ -82,17 +82,38 @@ theorem slice_usize_get_spec {T} (s : Slice T) (i : Usize) :
 @[step]
 theorem slice_range_get_mut_spec {T} (s : Slice T) (r : core.ops.range.Range Usize) :
     core.slice.Slice.get_mut (core.slice.index.SliceIndexRangeUsizeSlice T) s r
-      ⦃ _ => True ⦄ := by
+      ⦃ o _ =>
+        match o with
+        | none => True
+        | some dest =>
+          r.start.val ≤ r.end.val ∧
+            r.end.val ≤ s.length ∧
+            dest.length = r.end.val - r.start.val ⦄ := by
   unfold core.slice.Slice.get_mut
-  change core.slice.index.SliceIndexRangeUsizeSlice.get_mut r s ⦃ _ => True ⦄
+  change core.slice.index.SliceIndexRangeUsizeSlice.get_mut r s ⦃ o _ =>
+    match o with
+    | none => True
+    | some dest =>
+      r.start.val ≤ r.end.val ∧
+        r.end.val ≤ s.length ∧
+        dest.length = r.end.val - r.start.val ⦄
   unfold core.slice.index.SliceIndexRangeUsizeSlice.get_mut
-  split <;> simp
+  split
+  · rename_i hcond
+    simp only [spec_ok, uncurry']
+    obtain ⟨hle, hbound⟩ := hcond
+    have hle' : r.start.val ≤ r.end.val := (UScalar.le_equiv r.start r.end).mp hle
+    refine ⟨hle', hbound, ?_⟩
+    change (s.val.slice r.start.val r.end.val).length = r.end.val - r.start.val
+    rw [List.slice_length]
+    exact Nat.min_eq_right (Nat.sub_le_sub_right hbound r.start.val)
+  · simp
 
 @[step]
 theorem from_residual_from_same_spec {T E}
     (residual : core.result.Result core.convert.Infallible E) :
     core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
-      T (core.convert.FromSame E) residual ⦃ _ => True ⦄ := by
+      T (core.convert.FromSame E) residual ⦃ r => ∃ e, r = core.result.Result.Err e ⦄ := by
   unfold core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
   spec_split
   · rename_i x; nomatch x
@@ -102,7 +123,8 @@ theorem from_residual_from_same_spec {T E}
 theorem from_residual_codec_to_cose_spec {T}
     (residual : core.result.Result core.convert.Infallible CodecError) :
     core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
-      T CoseError.Insts.CoreConvertFromCodecError residual ⦃ _ => True ⦄ := by
+      T CoseError.Insts.CoreConvertFromCodecError residual
+      ⦃ r => ∃ e, r = core.result.Result.Err e ⦄ := by
   unfold core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
   spec_split
   · rename_i x; nomatch x
@@ -151,7 +173,7 @@ theorem from_residual_no_panic {T}
     AlwaysOk
       (core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
         T (core.convert.FromSame CodecError) residual) :=
-  of_spec (from_residual_from_same_spec residual)
+  of_spec (spec_mono (from_residual_from_same_spec residual) (fun _ _ => trivial))
 
 /-! # `read_head` (U8 additional-info match; split before `nstep` per arm) -/
 
@@ -290,21 +312,55 @@ theorem decode_protected_header_no_panic (bytes : Slice U8) :
 /-! # `Sig_structure` writer -/
 
 @[step]
-theorem SliceSink_new_spec : SliceSink.new ⦃ _ => True ⦄ := by
+theorem SliceSink_new_spec : SliceSink.new ⦃ s => s.len ≤ MAX_MESSAGE_LEN ⦄ := by
   unfold SliceSink.new
-  simp
+  simp [spec_ok]
 
 @[step]
 theorem SliceSink_len_spec (self : SliceSink) :
-    SliceSink.impl.len self ⦃ _ => True ⦄ := by
+    SliceSink.impl.len self ⦃ n => n = self.len ⦄ := by
   unfold SliceSink.impl.len
   simp
 
+/-- After `get_mut(self.len .. end)` returns `some dest` with
+    `end = self.len + bytes.len()`, `dest.len = bytes.len`.
+    The remodel `if dest.len() != bytes.len()` branch is therefore dead. -/
+theorem write_bytes_dest_len_eq
+    (self : SliceSink) (bytes : Slice U8) (end1 : Usize) (s dest : Slice U8)
+    (back : Option (Slice U8) → Slice U8)
+    (hadd : Usize.checked_add self.len (Slice.len bytes) = some end1)
+    (hget :
+      core.slice.Slice.get_mut (core.slice.index.SliceIndexRangeUsizeSlice U8) s
+        { start := self.len, «end» := end1 } = ok (some dest, back)) :
+    Slice.len dest = Slice.len bytes := by
+  have hpost := slice_range_get_mut_spec s { start := self.len, «end» := end1 }
+  rw [hget] at hpost
+  simp only [spec_ok, uncurry'] at hpost
+  obtain ⟨_, _, hdestlen⟩ := hpost
+  have hadd' := Usize.checked_add_bv_spec self.len (Slice.len bytes)
+  simp only [hadd] at hadd'
+  obtain ⟨_, hend, _⟩ := hadd'
+  apply UScalar.val_eq_imp
+  rw [Slice.len_val dest, hdestlen, hend]
+  omega
+
+/-- `write_bytes` preserves `len ≤ MAX_MESSAGE_LEN` unconditionally (`Ok` or
+    `Err`). `len` only advances after `get_mut` succeeds with
+    `end ≤ buf.len()` and `buf` is `[u8; MAX_MESSAGE_LEN]`; on `Err`, `len`
+    is unchanged. -/
 @[step]
-theorem write_bytes_spec (self : SliceSink) (bytes : Slice U8) :
-    SliceSink.write_bytes self bytes ⦃ _ => True ⦄ := by
+theorem write_bytes_spec (self : SliceSink) (bytes : Slice U8)
+    (hlen : self.len ≤ MAX_MESSAGE_LEN) :
+    SliceSink.write_bytes self bytes ⦃ _ sink' =>
+      sink'.len ≤ MAX_MESSAGE_LEN ⦄ := by
   unfold SliceSink.write_bytes
   step* -threadGrindState
+  have ho1 : o1 = some dest := by assumption
+  simp only [ho1] at o1_post
+  have hs : s.val.length = 4096 := by
+    simpa [Array.length_eq] using congrArg List.length s_post1
+  unfold MAX_MESSAGE_LEN
+  scalar_tac
 
 @[step]
 theorem be_byte_spec (be : Array U8 8#usize) (i : Usize) :
@@ -313,34 +369,66 @@ theorem be_byte_spec (be : Array U8 8#usize) (i : Usize) :
   nstep
 
 @[step]
-theorem write_head_spec (sink : SliceSink) (major_base : U8) (arg : U64) :
-    write_head sink major_base arg ⦃ _ => True ⦄ := by
+theorem write_head_spec (sink : SliceSink) (major_base : U8) (arg : U64)
+    (hlen : sink.len ≤ MAX_MESSAGE_LEN) :
+    write_head sink major_base arg ⦃ _ sink' =>
+      sink'.len ≤ MAX_MESSAGE_LEN ⦄ := by
   unfold write_head
-  nstep
+  step* -threadGrindState
 
 @[step]
-theorem write_bstr_spec (sink : SliceSink) (bytes : Slice U8) :
-    write_bstr sink bytes ⦃ _ => True ⦄ := by
+theorem write_bstr_spec (sink : SliceSink) (bytes : Slice U8)
+    (hlen : sink.len ≤ MAX_MESSAGE_LEN) :
+    write_bstr sink bytes ⦃ _ sink' =>
+      sink'.len ≤ MAX_MESSAGE_LEN ⦄ := by
   unfold write_bstr
-  nstep
+  step* -threadGrindState
 
 @[step]
-theorem write_text_spec (sink : SliceSink) (text : Slice U8) :
-    write_text sink text ⦃ _ => True ⦄ := by
+theorem write_text_spec (sink : SliceSink) (text : Slice U8)
+    (hlen : sink.len ≤ MAX_MESSAGE_LEN) :
+    write_text sink text ⦃ _ sink' =>
+      sink'.len ≤ MAX_MESSAGE_LEN ⦄ := by
   unfold write_text
-  nstep
+  step* -threadGrindState
 
 @[step]
-theorem write_array_header_spec (sink : SliceSink) (len : U64) :
-    write_array_header sink len ⦃ _ => True ⦄ := by
+theorem write_array_header_spec (sink : SliceSink) (len : U64)
+    (hlen : sink.len ≤ MAX_MESSAGE_LEN) :
+    write_array_header sink len ⦃ _ sink' =>
+      sink'.len ≤ MAX_MESSAGE_LEN ⦄ := by
   unfold write_array_header
-  nstep
+  step* -threadGrindState
+
+/-- The remodel `if written_len > MAX_MESSAGE_LEN` then-branch is not taken:
+    given `sink.len ≤ MAX_MESSAGE_LEN` (the `new` + `write_bytes` invariant),
+    `SliceSink.len` returns that field, so the comparison is false. The `Err`
+    postcondition is `False`: that branch would return `Err BufferTooSmall`. -/
+theorem sig_structure_len_le_max (sink : SliceSink)
+    (hlen : sink.len ≤ MAX_MESSAGE_LEN) :
+    (do
+      let written_len ← SliceSink.impl.len sink
+      if written_len > MAX_MESSAGE_LEN then
+        ok (core.result.Result.Err (CoseError.Codec CodecError.BufferTooSmall))
+      else
+        ok (core.result.Result.Ok
+          ({ buf := sink.buf, len := written_len } : SigStructure)))
+      ⦃ r =>
+        match r with
+        | core.result.Result.Ok ss => ss.len ≤ MAX_MESSAGE_LEN
+        | core.result.Result.Err _ => False ⦄ := by
+  unfold SliceSink.impl.len
+  simp [bind_tc_ok, spec_ok]
+  split
+  · unfold MAX_MESSAGE_LEN at *
+    scalar_tac
+  · simpa using hlen
 
 @[step]
 theorem build_sig_structure_spec (typ : Typ) (protected1 payload : Slice U8) :
     build_sig_structure typ protected1 payload ⦃ _ => True ⦄ := by
   unfold build_sig_structure
-  nstep
+  step* -threadGrindState
 
 /-- For every `Typ` and pair of byte slices, `build_sig_structure` returns `ok _`
     (`SigStructure` or `CoseError`). -/
@@ -373,5 +461,7 @@ theorem parse_sign1_no_panic (bytes : Slice U8) :
 #print axioms decode_protected_header_no_panic
 #print axioms build_sig_structure_no_panic
 #print axioms parse_sign1_no_panic
+#print axioms write_bytes_dest_len_eq
+#print axioms sig_structure_len_le_max
 
 end NoPanic
