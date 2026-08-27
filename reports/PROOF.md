@@ -791,6 +791,9 @@ import NoPanic
 EOF
 ```
 
+CI checks `reports/PROOF.sha256` against `lib.rs`, Cargo files, LLBC, and
+generated Lean so a Rust edit without re-extract fails the bind job.
+
 See `TOOLCHAIN.md` for pins and install. Layer-1 claim remains in `PROOF.md`.
 Layer-2 claim remains in `PROOF-bstr.md`. Layer-3 claim remains in
 `PROOF-envelope.md`. Layer-4 claim remains in `PROOF-header.md`. Layer-5
