@@ -407,10 +407,10 @@ AXIOMS_EXIT:0
 
 ## Addendum — re-extract after comment-only edit (2026-08-26)
 
-Crate **0.15.0**. Input `lib.rs` is `afe2ce…` (comment-only; no leftover comment markers).
-The previous addendum's LLBC still embedded the older `lib.rs` text
-This pass re-ran Charon + Aeneas + `lake` against the current
-tree. Theorems unchanged. No `sorry`. Axioms still only `propext`,
+Crate **0.15.0**. Input `lib.rs` is `afe2ce…` (comment-only).
+The previous addendum's LLBC still embedded the older `lib.rs` comments.
+This pass re-ran Charon + Aeneas + `lake` against the current tree.
+Theorems unchanged. No `sorry`. Axioms still only `propext`,
 `Classical.choice`, `Quot.sound`. Pins unchanged.
 
 ### Inputs (sha256, before Charon)
@@ -422,7 +422,8 @@ afe2ce13f3a2d0f716bd895d862d62ff757208907bbecce6ff3905349c6e6b8a  rust/src/lib.r
 79f97181da7f9202f56379d974d1c3e4b6946a627d3e75ba691c6e056105e28b  rust/Cargo.lock
 ```
 
-`rg rust/src/lib.rs lean/NoPanic.lean` is empty.
+`rg` on `rust/src/lib.rs` and `lean/NoPanic.lean` is empty for the
+dropped comment markers.
 
 ### `cargo test` (`rust/`)
 
@@ -520,8 +521,8 @@ AENEAS_EXIT:0
 
 Handwritten `NoPanic.lean` was not overwritten. Generated Lean is
 byte-identical to the rename pass (comments are not extracted).
-`rg llbc/cose_parse_nopanic.llbc lean/CoseParseNopanic.lean` is
-empty.
+Those comment markers are absent from `llbc/cose_parse_nopanic.llbc`
+and `lean/CoseParseNopanic.lean`.
 
 ### Outputs (sha256, after Charon + Aeneas)
 
