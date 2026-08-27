@@ -569,6 +569,95 @@ EOF
 AXIOMS_EXIT:0
 ```
 
+## Addendum — re-extract after RFC citation (2026-08-26)
+
+Crate **0.15.0**. rustdoc now cites RFC 9052 (not 8152). This pass
+re-ran Charon + Aeneas + `lake` so LLBC embeds the current source.
+Theorems unchanged. No `sorry`. Axioms still only `propext`,
+`Classical.choice`, `Quot.sound`. Pins unchanged.
+
+### Inputs (sha256, before Charon)
+
+```
+$ shasum -a 256 rust/src/lib.rs rust/Cargo.toml rust/Cargo.lock
+965c3236e2b385691a6655f362fc6a7ceab185c59ff6e07ee901c0c31c4fc356  rust/src/lib.rs
+6a6c27d37a19fba49790c90f8bc247a1ab95aad827078c310fa77bc97c3486e4  rust/Cargo.toml
+79f97181da7f9202f56379d974d1c3e4b6946a627d3e75ba691c6e056105e28b  rust/Cargo.lock
+```
+
+`rg 8152 rust/src/lib.rs llbc lean/*.lean reports/*.md` is empty.
+
+### `cargo test` (`rust/`)
+
+```
+$ cargo test
+   Compiling cose_parse_nopanic v0.15.0 (/Users/dzatona/Sites/MacExchange/cose-parse-nopanic/rust)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.67s
+test result: ok. 46 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+CARGO_TEST_EXIT:0
+```
+
+### Charon (`rust/`, PATH includes `$HOME/charon/bin`)
+
+```
+$ charon version
+0.1.220
+
+$ charon cargo --preset=aeneas --dest-file ../llbc/cose_parse_nopanic.llbc
+   Compiling cose_parse_nopanic v0.15.0 (/Users/dzatona/Sites/MacExchange/cose-parse-nopanic/rust)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.68s
+CHARON_EXIT:0
+```
+
+### Aeneas (progress bars stripped)
+
+```
+$ eval $(opam env --switch=5.3.0)
+$ ~/aeneas/bin/aeneas -version
+aeneas c2015b86
+
+$ ~/aeneas/bin/aeneas -backend lean -dest ../lean ../llbc/cose_parse_nopanic.llbc
+[Info ] Imported: ../llbc/cose_parse_nopanic.llbc
+[Info ] Generated: ../lean/CoseParseNopanic.lean
+[Warn ] The crate contains extracted external, unknown definitions: we advise using the option -split-files to allow manually providing these definitions in separate files.
+[Info ] Total execution time: 2.455992 seconds
+AENEAS_EXIT:0
+```
+
+Handwritten `NoPanic.lean` was not overwritten. Generated Lean is
+byte-identical to the previous extract (rustdoc is not extracted into
+Lean). LLBC now embeds RFC 9052.
+
+### Outputs (sha256, after Charon + Aeneas)
+
+```
+$ shasum -a 256 llbc/cose_parse_nopanic.llbc lean/CoseParseNopanic.lean
+8492e4febd91b91dde91776763ba4a6721563a63689ad53d53d302cee0bc7214  llbc/cose_parse_nopanic.llbc
+bdf30b6b1bcbf2d5eecd9418b5acda43558dded6414bbcb0cc67f2d002dd9536  lean/CoseParseNopanic.lean
+```
+
+### `lake build`
+
+```
+$ cd ../lean && lake build
+Build completed successfully (1698 jobs).
+LAKE_EXIT:0
+```
+
+Aeneas stdlib replayed `sorry` warnings in unused `get_unchecked` /
+`StringIter` models; they are not in these theorems' axiom sets.
+
+### `#print axioms`
+
+```
+$ lake env lean --stdin <<'EOF'
+import NoPanic
+#print axioms NoPanic.parse_sign1_no_panic
+EOF
+'NoPanic.parse_sign1_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
+AXIOMS_EXIT:0
+```
+
 ## Reproduce
 
 ```sh
