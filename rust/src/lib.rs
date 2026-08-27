@@ -25,7 +25,8 @@
 /// EXTRACT: copied from `kntrl-license-core` `error.rs`, keeping only the
 /// variants this path can produce. `thiserror` is dropped so Charon sees a
 /// plain `Copy` enum and no proc-macro dependency.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(test, derive(Debug))]
 pub enum CodecError {
     /// The input ended before a complete CBOR item could be read.
     UnexpectedEnd,
@@ -61,7 +62,8 @@ pub enum CodecError {
 /// `MalformedProtectedHeader`, `UnsupportedAlgorithm`, `UnknownTyp`).
 /// `thiserror` is dropped so Charon sees a plain `Copy` enum. Codec errors
 /// wrap as [`CoseError::Codec`] via [`From`] (source: `#[from] CodecError`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(test, derive(Debug))]
 pub enum CoseError {
     /// A lower-level canonical-CBOR codec error.
     Codec(CodecError),
@@ -115,7 +117,8 @@ const ALG_EDDSA_BYTE: u8 = MAJOR_NEGATIVE | 0x07;
 /// EXTRACT: copied from `kntrl-license-core` `types.rs`, keeping only this
 /// enum and [`Typ::from_u64`]. Product meaning of each variant is outside
 /// the no-panic claim. `Hash` is dropped (unused on this path).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(test, derive(Debug))]
 pub enum Typ {
     /// `typ = 1`.
     License,
