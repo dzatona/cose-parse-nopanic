@@ -1,5 +1,7 @@
 # PROOF — `parse_sign1_no_panic` (finale)
 
+Current proof. Earlier layer transcripts: [`history/`](history/).
+
 ## Claim
 
 For every hostile byte slice, the extracted `COSE_Sign1` envelope parse

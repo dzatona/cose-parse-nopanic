@@ -20,14 +20,14 @@ payload decode, trust-set.
 Rust crate and Lean namespace: `cose_parse_nopanic`. Reports below are
 the proof artifacts.
 
-Reports: [`reports/PROOF-parse.md`](reports/PROOF-parse.md)
-(finale), [`reports/EXTRACT.md`](reports/EXTRACT.md),
-[`reports/TOOLCHAIN.md`](reports/TOOLCHAIN.md). Layer proofs:
-[`PROOF.md`](reports/PROOF.md),
-[`PROOF-bstr.md`](reports/PROOF-bstr.md),
-[`PROOF-envelope.md`](reports/PROOF-envelope.md),
-[`PROOF-header.md`](reports/PROOF-header.md),
-[`PROOF-sig.md`](reports/PROOF-sig.md).
+Reports: [`reports/PROOF.md`](reports/PROOF.md),
+[`reports/EXTRACT.md`](reports/EXTRACT.md),
+[`reports/TOOLCHAIN.md`](reports/TOOLCHAIN.md).
+Earlier layer transcripts: [`reports/history/`](reports/history/).
+CI runs `cargo test` and `lake build` plus an axiom-set check.
+
+[Binder](https://github.com/runtimeverification/kernel-rust-verification-spike)
+is the Charon/Aeneas/Lean pipeline this proof follows (same pins).
 
 ## Reproduce
 
