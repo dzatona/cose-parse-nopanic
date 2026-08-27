@@ -35,7 +35,8 @@ Layer theorems still hold: `read_uint_no_panic`, `read_bstr_no_panic`,
 `read_bstr_fixed_64_no_panic`, `read_array_header_no_panic`,
 `read_map_header_no_panic`, `read_sign1_envelope_no_panic`,
 `decode_protected_header_no_panic`, `build_sig_structure_no_panic`.
-Leaves are `@[step]` specs; composites use `step*`; `read_head` is manual.
+Leaves are `@[step]` specs; composites use `step*`; `read_head` is
+`step*` then `split` on the additional-info match.
 
 ## Live run
 

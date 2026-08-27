@@ -21,7 +21,7 @@ unprotected map, protected header `{1: -8, 4: kid, 100: typ}`, then
 payload decode, trust-set.
 
 Rust crate and Lean namespace: `cose_parse_nopanic`. Proof script:
-leaves `@[step]`, composites `step*`, `read_head` by hand. Reports
+leaves `@[step]`, composites `step*`, `read_head` via `split`. Reports
 below are the proof artifacts.
 
 Reports: [`reports/PROOF.md`](reports/PROOF.md),
