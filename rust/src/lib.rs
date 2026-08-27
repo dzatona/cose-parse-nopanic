@@ -9,7 +9,7 @@
 //! composes the `COSE_Sign1` array-of-4 prefix of `verify`.
 //! [`decode_protected_header`] is the unrolled `{1,4,100}` map (three
 //! [`Reader::next_map_key`] calls, not a walker). [`build_sig_structure`]
-//! rebuilds RFC 8152 `Sig_structure` into a `[u8; MAX_MESSAGE_LEN]` buffer.
+//! rebuilds RFC 9052 `Sig_structure` into a `[u8; MAX_MESSAGE_LEN]` buffer.
 //! [`parse_sign1`] is `verify` minus crypto: those three helpers, then
 //! [`Parsed`]. Every line that is not a verbatim copy of that path is marked
 //! `// EXTRACT:` or `// REMODEL:`.
@@ -730,7 +730,7 @@ fn write_bstr(sink: &mut SliceSink, bytes: &[u8]) -> Result<(), CodecError> {
 /// Writes `text` as a canonical CBOR definite-length UTF-8 text string (major type 3).
 ///
 /// EXTRACT: source is generic over `impl Sink` and takes `&str` (`text.as_bytes()`).
-/// This path only has [`SliceSink`] and only writes the RFC 8152 context string
+/// This path only has [`SliceSink`] and only writes the RFC 9052 context string
 /// `Signature1` (ASCII), so the argument is already bytes.
 ///
 /// # Errors
@@ -752,7 +752,7 @@ fn write_array_header(sink: &mut SliceSink, len: u64) -> Result<(), CodecError> 
     write_head(sink, MAJOR_ARRAY, len)
 }
 
-/// RFC 8152 `Sig_structure` bytes in a fixed [`MAX_MESSAGE_LEN`]-byte buffer.
+/// RFC 9052 `Sig_structure` bytes in a fixed [`MAX_MESSAGE_LEN`]-byte buffer.
 ///
 /// EXTRACT: source `build_sig_structure` returns a prefix `&[u8]` into a
 /// caller-supplied `&mut [u8]`. This type owns the filled buffer so the
@@ -764,7 +764,7 @@ pub struct SigStructure {
     pub len: usize,
 }
 
-/// Reconstructs the RFC 8152 `Sig_structure` `["Signature1", protected,
+/// Reconstructs the RFC 9052 `Sig_structure` `["Signature1", protected,
 /// external_aad, payload]` into a `[u8; MAX_MESSAGE_LEN]` buffer.
 ///
 /// # Errors

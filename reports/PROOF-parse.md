@@ -4,7 +4,7 @@
 
 For every hostile byte slice, the extracted `COSE_Sign1` envelope parse
 (`verify` minus crypto) returns in the Aeneas `ok` monad. It does **not**
-prove RFC 8152 correctness, Ed25519, or product `Typ` meaning.
+prove RFC 9052 / RFC 9053 correctness, Ed25519, or product `Typ` meaning.
 
 ```
 ∀ bytes, ∃ r, parse_sign1 bytes = ok r

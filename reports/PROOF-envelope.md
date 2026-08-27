@@ -4,7 +4,7 @@
 
 For every hostile byte slice, the extracted `COSE_Sign1` array-of-4 envelope
 skeleton returns in the Aeneas `ok` monad. It does **not** prove RFC 8949 or
-RFC 8152 correctness, and it does **not** decode the protected-header map.
+RFC 9052 correctness, and it does **not** decode the protected-header map.
 
 ```
 ∀ buf, ∃ r, read_array_header buf = ok r

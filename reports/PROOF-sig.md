@@ -2,9 +2,9 @@
 
 ## Claim
 
-For every `Typ` and pair of hostile byte slices, the extracted RFC 8152
+For every `Typ` and pair of hostile byte slices, the extracted RFC 9052
 `Sig_structure` encoder returns in the Aeneas `ok` monad. It does **not**
-prove RFC 8152 correctness, and it does **not** compose with
+prove RFC 9052 correctness, and it does **not** compose with
 `read_sign1_envelope` / `decode_protected_header` into `parse_sign1`.
 
 ```

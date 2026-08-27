@@ -4,7 +4,7 @@
 
 For every hostile byte slice, the extracted unrolled `{1: alg=-8, 4: kid-16,
 100: typ}` protected-header decoder returns in the Aeneas `ok` monad. It does
-**not** prove RFC 8949 or RFC 8152 correctness, and it does **not** compose
+**not** prove RFC 8949 or RFC 9052 correctness, and it does **not** compose
 with `read_sign1_envelope` into `parse_sign1`.
 
 ```

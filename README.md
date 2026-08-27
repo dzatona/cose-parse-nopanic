@@ -1,8 +1,8 @@
 # cose-parse-nopanic
 
 Machine-checked no-panic proof of a `COSE_Sign1` envelope parse: the
-pre-crypto prefix of `verify`. Not Ed25519. Not RFC 8949 / RFC 8152
-correctness.
+pre-crypto prefix of `verify`. Not Ed25519. Not RFC 8949 / RFC 9052 /
+RFC 9053 correctness.
 
 Not the KNTRL product tree. Not a Runtime Verification repository.
 Work and name: Dmitrii Zatona. License: Apache-2.0.
