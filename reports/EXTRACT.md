@@ -417,6 +417,9 @@ via `From`. Truncated kid body stays inner `CodecError::UnexpectedEnd`
 | `take(1)?.first().copied().ok_or(UnexpectedEnd)` in `read_fixed_byte` | `get_u8(take(1)?, 0)?` | **none** — same bounds check as layer 1 |
 | `if let Some(last) = *last_key && key <= last` | nested `if let` / `if` | **none** — same strictly-ascending predicate |
 | `read_fixed_byte(...).map_err(\|_bad_alg\| UnsupportedAlgorithm)` | `match` → `UnsupportedAlgorithm` on `Err(_)` | **none** — still maps every `read_fixed_byte` error |
+
+A truncated alg byte therefore yields `UnsupportedAlgorithm`, not
+`Codec(UnexpectedEnd)`. Same as source.
 | `Typ::from_u64(...).map_err(\|_unknown\| UnknownTyp)` | `match` → `UnknownTyp` on `Err(_)` | **none** — still maps `InvalidEnumValue` |
 | `<[u8; 16]>::try_from(bytes).map_err(...)` | `match` `try_from` | **none** — same WrongLength; take-then-try_from |
 
