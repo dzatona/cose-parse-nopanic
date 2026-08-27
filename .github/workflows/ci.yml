@@ -18,11 +18,11 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
-        with:
-          repository: AeneasVerif/aeneas
-          ref: c2015b86
-          path: aeneas
+      - name: Checkout Aeneas c2015b86
+        run: |
+          git clone --filter=blob:none --no-checkout https://github.com/AeneasVerif/aeneas.git aeneas
+          git -C aeneas fetch --depth 1 origin c2015b8668ba6d5b41f5f19d00a881c12bbb0b5d
+          git -C aeneas checkout FETCH_HEAD
       - name: Install elan
         run: |
           curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf \
