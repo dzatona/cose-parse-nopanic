@@ -1162,9 +1162,7 @@ theorem parse_sign1_no_panic (bytes : Slice U8) :
       | Continue _ =>
         exact AlwaysOk.of_ok _
 
--- Expected: propext, Classical.choice, Quot.sound. See reports/PROOF.md,
--- reports/PROOF-bstr.md, reports/PROOF-envelope.md, reports/PROOF-header.md,
--- reports/PROOF-sig.md, and reports/PROOF-parse.md.
+-- Expected: propext, Classical.choice, Quot.sound. See reports/PROOF.md.
 #print axioms read_uint_no_panic
 #print axioms read_bstr_no_panic
 #print axioms read_bstr_fixed_64_no_panic
