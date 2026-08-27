@@ -20,8 +20,9 @@ unprotected map, protected header `{1: -8, 4: kid, 100: typ}`, then
 **Not proved:** signature verification, `verify_strict`, public keys,
 payload decode, trust-set.
 
-Rust crate and Lean namespace: `cose_parse_nopanic`. Reports below are
-the proof artifacts.
+Rust crate and Lean namespace: `cose_parse_nopanic`. Proof script:
+leaves `@[step]`, composites `step*`, `read_head` by hand. Reports
+below are the proof artifacts.
 
 Reports: [`reports/PROOF.md`](reports/PROOF.md),
 [`reports/EXTRACT.md`](reports/EXTRACT.md),

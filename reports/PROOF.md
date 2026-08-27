@@ -35,6 +35,7 @@ Layer theorems still hold: `read_uint_no_panic`, `read_bstr_no_panic`,
 `read_bstr_fixed_64_no_panic`, `read_array_header_no_panic`,
 `read_map_header_no_panic`, `read_sign1_envelope_no_panic`,
 `decode_protected_header_no_panic`, `build_sig_structure_no_panic`.
+Leaves are `@[step]` specs; composites use `step*`; `read_head` is manual.
 
 ## Live run
 
@@ -100,28 +101,15 @@ dc13d5679ff3b2ff558b46b726c2f43a2d721ce61bcc5ffb753ce8dfe814fb0d  llbc/cose_pars
 411267ea74ecb7a05ea1a3950a4b9e8f3da41816481a37032cf491539c22f450  lean/CoseParseNopanic.lean
 ```
 
-### `lake build`
+### `lake build` / axioms
 
-```
-$ cd ../lean && lake build
-info: NoPanic.lean:1176:0: 'NoPanic.parse_sign1_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
-Build completed successfully (1698 jobs).
-LAKE_EXIT:0
-```
+CI is the witness (Lean 4.31.0, Aeneas @ `c2015b86`, axiom grep):
+https://github.com/dzatona/cose-parse-nopanic/actions/runs/33041618859
+(`827a165`, job `lean`). Local line numbers in an old transcript would
+drift; Charon/Aeneas stay local because CI does not run them.
 
-Aeneas stdlib replayed `sorry` warnings in unused `get_unchecked` /
-`StringIter` models; they are not in these theorems' axiom sets.
-
-### `#print axioms`
-
-```
-$ lake env lean --stdin <<'EOF'
-import NoPanic
-#print axioms NoPanic.parse_sign1_no_panic
-EOF
-'NoPanic.parse_sign1_no_panic' depends on axioms: [propext, Classical.choice, Quot.sound]
-AXIOMS_EXIT:0
-```
+Aeneas stdlib has `sorry` in unused `get_unchecked` / `StringIter`
+models; they are not in these theorems' axiom sets.
 
 ## Reproduce
 
