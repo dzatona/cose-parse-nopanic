@@ -5,7 +5,7 @@ pre-crypto prefix of `verify`. Not Ed25519. Not RFC 8949 / RFC 8152
 correctness.
 
 Not the KNTRL product tree. Not a Runtime Verification repository.
-Work and name: Dmitrii Zatona.
+Work and name: Dmitrii Zatona. License: Apache-2.0.
 
 **Proved:** for every `&[u8]`, `parse_sign1` returns Aeneas `ok _` — a
 `Parsed` envelope or a normal `CoseError`. It does not panic.
