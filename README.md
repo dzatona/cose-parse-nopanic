@@ -13,10 +13,10 @@ not panic. Also proved: `slice_validated_uints` (a `while` over the
 decoded array count, not generic `slice_validated_array`) never panics;
 Aeneas `loop` is discharged with `loop.spec_decr_nat`. Also proved:
 if `read_uint` returns `Ok(n)`, the head is RFC 8949 §4.2.1 smallest-form
-major-0 for `n` (decode-only; not encode-then-decode). This is an
-extracted copy of the `verify` pre-crypto path plus that looping
-specialization, not a proof of `kntrl-license-core` in place. The
-product does not depend on this crate.
+major-0 for `n` (decode-only; not encode-then-decode). This crate contains
+an extracted/remodeled wrapper around the pre-crypto control flow of
+`verify`, plus that looping specialization; it is not a proof of
+`kntrl-license-core` in place.
 
 That path is: array of 4, protected/payload/signature bstrs, empty
 unprotected map, protected header `{1: -8, 4: kid, 100: typ}`, then
@@ -34,7 +34,7 @@ Reports: [`reports/PROOF.md`](reports/PROOF.md),
 [`reports/EXTRACT.md`](reports/EXTRACT.md),
 [`reports/TOOLCHAIN.md`](reports/TOOLCHAIN.md).
 Earlier layer transcripts: [`reports/history/`](reports/history/).
-CI runs `cargo test` and `lake build` plus an axiom-set check.
+The documented reproduction runs `cargo test`, `lake build`, and axiom-set checks.
 
 [Binder](https://github.com/runtimeverification/kernel-rust-verification-spike)
 is the Charon/Aeneas/Lean pipeline this proof follows (same pins).
