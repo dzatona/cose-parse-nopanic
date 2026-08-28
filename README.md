@@ -9,9 +9,11 @@ Work and name: Dmitrii Zatona. License: Apache-2.0.
 
 **Proved:** for every `&[u8]`, `parse_sign1` in **this** crate returns
 Aeneas `ok _` — a `Parsed` envelope or a normal `CoseError`. It does
-not panic. This is an extracted copy of the `verify` pre-crypto path,
-not a proof of `kntrl-license-core` in place. The product does not
-depend on this crate.
+not panic. Also proved: `slice_validated_uints` (a `while` over the
+decoded array count) never panics; Aeneas `loop` is discharged with
+`loop.spec_decr_nat`. This is an extracted copy of the `verify`
+pre-crypto path plus that looping specialization, not a proof of
+`kntrl-license-core` in place. The product does not depend on this crate.
 
 That path is: array of 4, protected/payload/signature bstrs, empty
 unprotected map, protected header `{1: -8, 4: kid, 100: typ}`, then

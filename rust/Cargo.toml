@@ -1,11 +1,11 @@
 [package]
 name = "cose_parse_nopanic"
-version = "0.17.0"
+version = "0.18.0"
 authors = ["Dmitrii Zatona <dmitrii@zatona.dev>"]
 edition = "2021"
 rust-version = "1.92"
 license = "Apache-2.0"
-description = "Extracted loop-free canonical-CBOR COSE_Sign1 envelope parse (verify minus crypto) for a no-panic proof"
+description = "Extracted canonical-CBOR COSE_Sign1 envelope parse (verify minus crypto) plus a looping array-of-uints no-panic proof"
 publish = false
 
 [lib]

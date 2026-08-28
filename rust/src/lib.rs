@@ -1,5 +1,4 @@
-//! Loop-free canonical-CBOR decoder paths extracted for machine-checked
-//! no-panic claims.
+//! Canonical-CBOR decoder paths extracted for machine-checked no-panic claims.
 //!
 //! [`take`], [`Reader::read_head`], [`Reader::read_uint`], [`Reader::read_bstr`],
 //! [`Reader::read_bstr_fixed_64`], [`Reader::read_bstr_fixed_16`],
@@ -11,8 +10,9 @@
 //! [`Reader::next_map_key`] calls, not a walker). [`build_sig_structure`]
 //! rebuilds RFC 9052 `Sig_structure` into a `[u8; MAX_MESSAGE_LEN]` buffer.
 //! [`parse_sign1`] is `verify` minus crypto: those three helpers, then
-//! [`Parsed`]. Every line that is not a verbatim copy of that path is marked
-//! `// EXTRACT:` or `// REMODEL:`.
+//! [`Parsed`]. [`slice_validated_uints`] is a looping specialization of
+//! `slice_validated_array` (`while seen < count`). Every line that is not a
+//! verbatim copy of that path is marked `// EXTRACT:` or `// REMODEL:`.
 
 // EXTRACT: standalone crate is `no_std` and allocator-free; the source crate
 // is also `no_std` by default, but this file does not pull the rest of it.
@@ -848,13 +848,52 @@ pub fn parse_sign1<'a>(bytes: &'a [u8]) -> Result<Parsed<'a>, CoseError> {
     })
 }
 
+/// Validates a definite-length CBOR array of canonical unsigned integers.
+///
+/// Returns the array count. Extra bytes after the array are not consumed.
+///
+/// # Errors
+/// As [`Reader::read_array_header`] and [`Reader::read_uint`]: truncated input,
+/// wrong major type, non-canonical length, reserved/indefinite additional-info.
+// EXTRACT: specialization of `slice_validated_array` (`reader.rs`) with
+// `validate_elem = |r| r.read_uint().map(|_| ())`. Source takes `impl FnMut`;
+// Charon/Aeneas do not model that callback. The `while seen < count` is kept
+// — the bound is the array count decoded from the hostile bytes, not a
+// compile-time constant. Not three unrolled `next_map_key` (layer 4 header).
+// Source also snapshots `remaining()` and returns the occupied slice; this
+// path only needs no-panic of the count loop, so the slice return is dropped.
+pub fn slice_validated_uints(buf: &[u8]) -> Result<u64, CodecError> {
+    // EXTRACT: public `&[u8]` wrapper (Binder `parse_one` shape).
+    let mut reader = Reader::new(buf);
+    let count = reader.read_array_header()?;
+    let mut seen = 0_u64;
+    // REMODEL: Aeneas rejects `?` / `return` inside `while` ("Early returns
+    // inside of loops are not supported yet"). Same control-flow as source:
+    // stop on the first `read_uint` / `checked_add` error; success is `Ok(count)`.
+    // `ok_or` is also an Aeneas-unknown external; `None` is still UnexpectedEnd.
+    let mut err: Option<CodecError> = None;
+    while seen < count && err.is_none() {
+        match reader.read_uint() {
+            Ok(_) => match seen.checked_add(1) {
+                Some(n) => seen = n,
+                None => err = Some(CodecError::UnexpectedEnd),
+            },
+            Err(e) => err = Some(e),
+        }
+    }
+    match err {
+        Some(e) => Err(e),
+        None => Ok(count),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         build_sig_structure, decode_protected_header, parse_sign1, read_array_header, read_bstr,
-        read_bstr_fixed_64, read_map_header, read_sign1_envelope, read_uint, write_head,
-        CodecError, CoseError, Reader, SliceSink, Typ, AAD_ENROLL, AAD_LICENSE, AAD_REVOKE,
-        AAD_TRUST_UPDATE, MAX_MESSAGE_LEN,
+        read_bstr_fixed_64, read_map_header, read_sign1_envelope, read_uint, slice_validated_uints,
+        write_head, CodecError, CoseError, Reader, SliceSink, Typ, AAD_ENROLL, AAD_LICENSE,
+        AAD_REVOKE, AAD_TRUST_UPDATE, MAX_MESSAGE_LEN,
     };
 
     /// Canonical 4-array: empty protected, empty unprotected map, empty payload,
@@ -1617,6 +1656,67 @@ mod tests {
         assert_eq!(
             expect_parse_err(&bytes),
             CoseError::Codec(CodecError::BufferTooSmall)
+        );
+    }
+
+    #[test]
+    fn should_reject_empty_array_input() {
+        assert_eq!(slice_validated_uints(&[]), Err(CodecError::UnexpectedEnd));
+    }
+
+    #[test]
+    fn should_decode_empty_uint_array() {
+        assert_eq!(slice_validated_uints(&[0x80]), Ok(0));
+    }
+
+    #[test]
+    fn should_decode_uint_array_counts_1_to_3() {
+        assert_eq!(slice_validated_uints(&[0x81, 0x00]), Ok(1));
+        assert_eq!(slice_validated_uints(&[0x82, 0x00, 0x01]), Ok(2));
+        assert_eq!(slice_validated_uints(&[0x83, 0x00, 0x01, 0x02]), Ok(3));
+    }
+
+    #[test]
+    fn should_reject_truncated_uint_array() {
+        assert_eq!(
+            slice_validated_uints(&[0x81]),
+            Err(CodecError::UnexpectedEnd)
+        );
+        assert_eq!(
+            slice_validated_uints(&[0x82, 0x00]),
+            Err(CodecError::UnexpectedEnd)
+        );
+        assert_eq!(
+            slice_validated_uints(&[0x81, 0x18]),
+            Err(CodecError::UnexpectedEnd)
+        );
+    }
+
+    #[test]
+    fn should_reject_non_canonical_uint_inside_array() {
+        assert_eq!(
+            slice_validated_uints(&[0x81, 0x18, 0x05]),
+            Err(CodecError::NonCanonicalLength)
+        );
+        assert_eq!(
+            slice_validated_uints(&[0x82, 0x00, 0x18, 0x05]),
+            Err(CodecError::NonCanonicalLength)
+        );
+    }
+
+    #[test]
+    fn should_reject_wrong_major_for_uint_array() {
+        assert_eq!(
+            slice_validated_uints(&[0x00]),
+            Err(CodecError::TypeMismatch)
+        );
+        assert_eq!(
+            slice_validated_uints(&[0xA0]),
+            Err(CodecError::TypeMismatch)
+        );
+        assert_eq!(
+            slice_validated_uints(&[0x81, 0x40]),
+            Err(CodecError::TypeMismatch)
         );
     }
 }

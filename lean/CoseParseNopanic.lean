@@ -1557,4 +1557,62 @@ def parse_sign1
     core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
       Parsed (core.convert.FromSame CoseError) residual
 
+/-- [cose_parse_nopanic::slice_validated_uints]: loop body 0:
+    Source: 'src/lib.rs', lines 1:0-883:5
+    Visibility: public -/
+@[rust_loop_body]
+def slice_validated_uints_loop.body
+  (count : Std.U64) (reader : Reader) (seen : Std.U64)
+  (err : Option CodecError) :
+  Result (ControlFlow (Reader × Std.U64 × (Option CodecError)) (Option
+    CodecError))
+  := do
+  if seen < count
+  then
+    let b := core.option.Option.is_none err
+    if b
+    then
+      let (r, reader1) ← Reader.read_uint reader
+      match r with
+      | core.result.Result.Ok _ =>
+        let o ← lift (U64.checked_add seen 1#u64)
+        match o with
+        | none => ok (cont (reader1, seen, some CodecError.UnexpectedEnd))
+        | some n => ok (cont (reader1, n, err))
+      | core.result.Result.Err e => ok (cont (reader1, seen, some e))
+    else ok (done err)
+  else ok (done err)
+
+/-- [cose_parse_nopanic::slice_validated_uints]: loop 0:
+    Source: 'src/lib.rs', lines 1:0-883:5
+    Visibility: public -/
+@[rust_loop]
+def slice_validated_uints_loop
+  (reader : Reader) (count : Std.U64) (seen : Std.U64)
+  (err : Option CodecError) :
+  Result (Option CodecError)
+  := do
+  loop
+    (fun (reader1, seen1, err1) => slice_validated_uints_loop.body count
+      reader1 seen1 err1)
+    (reader, seen, err)
+
+/-- [cose_parse_nopanic::slice_validated_uints]:
+    Source: 'src/lib.rs', lines 865:0-888:1
+    Visibility: public -/
+def slice_validated_uints
+  (buf : Slice Std.U8) : Result (core.result.Result Std.U64 CodecError) := do
+  let reader ← Reader.new buf
+  let (r, reader1) ← Reader.read_array_header reader
+  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+  match cf with
+  | core.ops.control_flow.ControlFlow.Continue val =>
+    let err ← slice_validated_uints_loop reader1 val 0#u64 none
+    match err with
+    | none => ok (core.result.Result.Ok val)
+    | some e => ok (core.result.Result.Err e)
+  | core.ops.control_flow.ControlFlow.Break residual =>
+    core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+      Std.U64 (core.convert.FromSame CodecError) residual
+
 end cose_parse_nopanic

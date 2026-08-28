@@ -681,7 +681,88 @@ envelope, nonempty unprotected, bad header, truncated, trailing, and
 
 ## Not extracted (after finale)
 
-`slice_validated_array`, full `verify` (dalek), unions, `MaybeUninit`,
-raw pointer casts, ed25519, KNTRL `Typ` meaning, payload decode.
-Unused `CoseError` variants (`SignatureInvalid`, `InvalidPublicKey`,
-`InvalidSigningKey`). The `Sink` trait and `Vec` sink.
+`slice_validated_array` (generic `FnMut`; looping uint specialization is
+below), full `verify` (dalek), unions, `MaybeUninit`, raw pointer casts,
+ed25519, KNTRL `Typ` meaning, payload decode. Unused `CoseError` variants
+(`SignatureInvalid`, `InvalidPublicKey`, `InvalidSigningKey`). The `Sink`
+trait and `Vec` sink.
+
+---
+
+# EXTRACT — `slice_validated_uints` (loop)
+
+Same CBOR source files and provenance hashes as the layer-1 table.
+Destination is still `rust/src/lib.rs`. This is **not** on the
+`parse_sign1` path. It is the looping specialization of
+`slice_validated_array`.
+
+Source `slice_validated_array` (`reader.rs` 233–247, quoted read-only):
+
+```
+pub fn slice_validated_array<'a>(
+    reader: &mut Reader<'a>,
+    mut validate_elem: impl FnMut(&mut Reader<'a>) -> Result<(), CodecError>,
+) -> Result<&'a [u8], CodecError> {
+    let start = reader.remaining();
+    let count = reader.read_array_header()?;
+    let mut seen = 0_u64;
+    while seen < count {
+        validate_elem(reader)?;
+        seen = seen.checked_add(1).ok_or(CodecError::UnexpectedEnd)?;
+    }
+    let consumed =
+        start.len().checked_sub(reader.remaining().len()).ok_or(CodecError::UnexpectedEnd)?;
+    start.get(..consumed).ok_or(CodecError::UnexpectedEnd)
+}
+```
+
+Public hostile-bytes wrapper (Binder `parse_one` shape):
+
+- `slice_validated_uints(buf: &[u8]) -> Result<u64, CodecError>`
+
+The Rust **still has** `while seen < count && err.is_none()`. The bound
+is the array count decoded from the bytes, not a compile-time constant.
+Not three unrolled `next_map_key`. Not `for _ in 0..K`.
+
+## Line map (loop)
+
+| Source | Crate (`rust/src/lib.rs`) | Notes |
+|---|---|---|
+| `reader.rs` 233–247 `slice_validated_array` | `slice_validated_uints` 865–888 | looping uint specialization |
+| `reader.rs` 238 `read_array_header` | 868 | already extracted |
+| `reader.rs` 240 `while seen < count` | 875 `while seen < count && err.is_none()` | still a `while`; see REMODEL |
+| `reader.rs` 241 `validate_elem(reader)` | 876–882 `read_uint` | `FnMut` dropped |
+| `reader.rs` 242 `checked_add(1).ok_or` | 877–880 `match checked_add` | same overflow → UnexpectedEnd |
+| `reader.rs` 237 / 244–246 `remaining` + slice | — | dropped; theorem is no-panic of the count loop |
+
+## Intentional diffs (`// EXTRACT:`)
+
+| Crate | Why |
+|---|---|
+| `validate_elem = read_uint`, not `impl FnMut` | Charon/Aeneas do not model that callback |
+| Public `&[u8]` wrapper returning `u64` count | Binder `parse_one` shape; source returns occupied slice |
+| No `remaining()` snapshot | slice return is not in the no-panic claim |
+
+## Remodel (`// REMODEL:`)
+
+First Aeneas translation of `?` / `return Err` inside `while` failed:
+
+```
+[Error] Early returns inside of loops are not supported yet
+Source: 'src/lib.rs', lines 865:0-880:1
+```
+
+| Source | Remodel | Error change |
+|---|---|---|
+| `validate_elem(reader)?; seen = seen.checked_add(1).ok_or(UnexpectedEnd)?` inside `while` | `err: Option<CodecError>` flag; `while seen < count && err.is_none()`; `match` on `read_uint` / `checked_add` | **none** — first error still stops the loop; success is still `Ok(count)` |
+| `ok_or(UnexpectedEnd)` | `match checked_add` → `None` is UnexpectedEnd | **none** |
+
+Aeneas then emitted `slice_validated_uints_loop` / `.body` using the
+`loop` combinator (not `-loops-to-rec`). Proof is
+`loop.spec_decr_nat` in `lean/NoPanic.lean`.
+
+## Not extracted (after loop)
+
+Generic `slice_validated_array` (`FnMut`), `remaining()`, occupied-slice
+return, full `verify` (dalek), unions, `MaybeUninit`, raw pointer casts,
+ed25519, KNTRL `Typ` meaning, payload decode.

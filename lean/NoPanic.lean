@@ -12,6 +12,8 @@
 -- `Reader.read_head`: `nstep` to the additional-info `U8` match, `split` that
 -- match, then `nstep` per arm. Unbounded `step*` does not split this match
 -- in bounded time.
+-- `slice_validated_uints` is the looping case: Aeneas emits `loop`, proved
+-- with `loop.spec_decr_nat` (`slice_validated_uints_loop_no_div`).
 -- This theorem does not claim RFC 8949 correctness.
 
 import CoseParseNopanic
@@ -1400,6 +1402,75 @@ theorem read_uint_ok_is_canonical (buf : Slice U8) (n : U64)
     refine ⟨head, ?_, hmajor, hsf⟩
     simpa [h0] using hsome
 
+/-! # `slice_validated_uints` (Aeneas `loop` over the array count) -/
+
+/-- Remaining unread slots, doubled, plus one while `err` is still `none`.
+    An error-continue keeps `seen` and sets `err`, so the extra `+ 1` is what
+    decreases; a successful `checked_add` decreases the slot count. -/
+def slice_validated_uints_measure (count : U64) :
+    Reader × U64 × Option CodecError → Nat
+  | (_, seen, none) => (count.val - seen.val) * 2 + 1
+  | (_, _, some _) => 0
+
+/-- The extracted loop body returns `ok` (never `fail`/`div`) and either
+    finishes or continues with a strictly smaller measure. -/
+theorem slice_validated_uints_loop_body_progress
+    (count : U64) (reader : Reader) (seen : U64) (err : Option CodecError) :
+    slice_validated_uints_loop.body count reader seen err ⦃ r =>
+      match r with
+      | .done _ => True
+      | .cont st' =>
+          slice_validated_uints_measure count st' <
+            slice_validated_uints_measure count (reader, seen, err) ⦄ := by
+  unfold slice_validated_uints_loop.body
+  split
+  · rename_i hlt
+    have hlt' : seen.val < count.val := (UScalar.lt_equiv seen count).mp hlt
+    dsimp only
+    split
+    · rename_i hnone
+      have herr : err = none := by
+        simp [core.option.Option.is_none] at hnone
+        cases err <;> simp_all [Option.isNone]
+      subst herr
+      nstep
+      all_goals (simp_all [spec_ok, slice_validated_uints_measure]; try omega)
+    · rw [spec_ok]; trivial
+  · rw [spec_ok]; trivial
+
+/-- The Aeneas `loop` combinator on this body does not diverge. -/
+theorem slice_validated_uints_loop_no_div
+    (reader : Reader) (count seen : U64) (err : Option CodecError) :
+    slice_validated_uints_loop reader count seen err ⦃ _ => True ⦄ := by
+  unfold slice_validated_uints_loop
+  apply loop.spec_decr_nat
+    (measure := slice_validated_uints_measure count)
+    (inv := fun _ => True)
+    (post := fun _ => True)
+  · intro ⟨rd, sn, er⟩ _
+    apply spec_mono
+    · exact slice_validated_uints_loop_body_progress count rd sn er
+    · intro r hr
+      cases r with
+      | done _ => trivial
+      | cont _ => exact ⟨trivial, hr⟩
+  · trivial
+
+@[step]
+theorem slice_validated_uints_loop_spec
+    (reader : Reader) (count seen : U64) (err : Option CodecError) :
+    slice_validated_uints_loop reader count seen err ⦃ _ => True ⦄ :=
+  slice_validated_uints_loop_no_div reader count seen err
+
+/-- For every byte slice, `slice_validated_uints` returns `ok _`
+    (the array count or `CodecError`). The extracted body contains a `while`
+    over the decoded array count. -/
+theorem slice_validated_uints_no_panic (buf : Slice U8) :
+    ∃ r, slice_validated_uints buf = ok r := by
+  apply of_spec
+  unfold slice_validated_uints
+  nstep
+
 -- Expected: propext, Classical.choice, Quot.sound. See reports/PROOF.md.
 #print axioms read_uint_no_panic
 #print axioms read_bstr_no_panic
@@ -1418,5 +1489,7 @@ theorem read_uint_ok_is_canonical (buf : Slice U8) (n : U64)
 #print axioms take_ok_eq
 #print axioms read_head_ok_smallest_form
 #print axioms read_uint_ok_is_canonical
+#print axioms slice_validated_uints_loop_no_div
+#print axioms slice_validated_uints_no_panic
 
 end NoPanic
