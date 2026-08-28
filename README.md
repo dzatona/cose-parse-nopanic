@@ -34,7 +34,16 @@ Reports: [`reports/PROOF.md`](reports/PROOF.md),
 [`reports/EXTRACT.md`](reports/EXTRACT.md),
 [`reports/TOOLCHAIN.md`](reports/TOOLCHAIN.md).
 Earlier layer transcripts: [`reports/history/`](reports/history/).
-The documented reproduction runs `cargo test`, `lake build`, and axiom-set checks.
+CI uses separate Rust and Lean jobs. The Rust job runs
+`sha256sum -c reports/PROOF.sha256`, which checks recorded hashes for
+`rust/src/lib.rs`, the Cargo files, `llbc/cose_parse_nopanic.llbc`, and
+`lean/CoseParseNopanic.lean`, then runs `cargo test --manifest-path
+rust/Cargo.toml`. The Lean job checks out Aeneas at
+`c2015b8668ba6d5b41f5f19d00a881c12bbb0b5d`, installs Lean 4.31.0, runs
+`lake build Aeneas` and `lake build`, and checks axioms for
+`NoPanic.parse_sign1_no_panic`, failing on an additional axiom outside
+`propext`, `Classical.choice`, or `Quot.sound`. CI does not run Charon
+or Aeneas extraction.
 
 [Binder](https://github.com/runtimeverification/kernel-rust-verification-spike)
 is the Charon/Aeneas/Lean pipeline this proof follows (same pins).
